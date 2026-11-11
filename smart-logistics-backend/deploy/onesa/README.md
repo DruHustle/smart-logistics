@@ -194,3 +194,19 @@ Primary references:
 [image initialization](https://github.com/docker-library/postgres/blob/master/docker-entrypoint.sh),
 [PostgreSQL backup methods](https://www.postgresql.org/docs/current/backup.html),
 and [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/).
+
+### Onesa administrator sign-in
+
+Apply migration `009_onesa_identity.sql` before deploying the Node API. Register
+the `logistics` client on the Portal with application URL
+`https://logistics.onesa.eu` and exact callback
+`https://logistics.onesa.eu/api/auth/onesa/callback`. Add the callback to
+the Portal frontend allowlist. Supply the matching confidential client ID
+and secret through the Logistics runtime environment and enable
+`ONESA_IDENTITY_ENABLED`. The frontend reads availability from the API.
+
+A verified platform administrator can then choose **Sign in with Onesa**.
+A new Logistics identity starts without workspace membership. An existing
+local account with the same email requires its password and explicit linking,
+which preserves its role and workspace. The API revalidates the central
+session on each authenticated request, including gateway session checks.

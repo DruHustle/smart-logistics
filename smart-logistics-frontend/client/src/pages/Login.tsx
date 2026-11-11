@@ -11,7 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrainCircuit, Lock, Mail, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { apiAuthService } from "@/lib/api-auth";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -19,7 +20,22 @@ import { useLocation } from "wouter";
 export default function Login() {
   const { login } = useAuth();
   const [, navigate] = useLocation();
-  const liveRequested = useHashQuery().get("mode") === "live";
+  const query = useHashQuery();
+  const liveRequested = query.get("mode") === "live";
+  const onesaResult = query.get("onesa");
+  const [onesaEnabled, setOnesaEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    apiAuthService
+      .onesaAvailable()
+      .then(enabled => {
+        if (active) setOnesaEnabled(enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const [signInMode, setSignInMode] = useState<"live" | "demo">("live");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +67,20 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  async function signInWithOnesa(link = false) {
+    setIsLoading(true);
+    try {
+      await apiAuthService.startOnesa(
+        link ? { email: email.trim(), password } : undefined
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Onesa sign-in is unavailable."
+      );
+      setIsLoading(false);
+    }
+  }
 
   const fillDemoCredentials = (role: string) => {
     const credentials: Record<string, { email: string; password: string }> = {
@@ -125,6 +155,27 @@ export default function Login() {
               Use live sign-in
             </Button>
           )}
+          {onesaResult && (
+            <p role="alert" className="text-sm">
+              {onesaResult === "link"
+                ? "This email already has a Logistics account. Enter its email and password below, then choose Link account with Onesa to confirm both accounts."
+                : onesaResult === "denied"
+                  ? "An active Onesa platform administrator account with MFA is required."
+                  : onesaResult === "unavailable"
+                    ? "Onesa sign-in is temporarily unavailable. Please try again."
+                    : "This sign-in has expired. Please start again."}
+            </p>
+          )}
+          {onesaEnabled && signInMode === "live" && (
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={isLoading}
+              onClick={() => void signInWithOnesa()}
+            >
+              Sign in with Onesa
+            </Button>
+          )}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -192,6 +243,17 @@ export default function Login() {
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
+            {onesaEnabled && onesaResult === "link" && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={isLoading || !email || !password}
+                onClick={() => void signInWithOnesa(true)}
+              >
+                Link account with Onesa
+              </Button>
+            )}
           </form>
 
           <div className="text-center text-sm">

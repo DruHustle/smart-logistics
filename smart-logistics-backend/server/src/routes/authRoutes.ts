@@ -15,7 +15,10 @@ import { validateBody } from "../middleware/validate";
 import { rateLimit } from "../middleware/rateLimit";
 import { z } from "zod";
 
+import onesaAuth from "./onesaAuth";
+
 const router = Router();
+router.use("/onesa", onesaAuth);
 
 const password = z.string().min(12).max(128);
 const email = z

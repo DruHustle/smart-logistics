@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../config/security";
 import { connection } from "../config/db";
 
+import { identityConfig, InactiveIdentity, liveIdentity, openToken } from "../services/onesaIdentity";
+
 export interface AuthenticatedUser {
   id: number;
   email: string;
@@ -56,7 +58,7 @@ export const authenticate = async (
   }
   try {
     const result = await connection.query(
-      `SELECT u.id,u.email,u.role,s.id AS session_id,s.workspace_id,w.dotnet_organization_id
+      `SELECT u.id,u.email,u.role,u.onesa_issuer,u.onesa_subject,s.onesa_token,s.id AS session_id,s.workspace_id,w.dotnet_organization_id
    FROM auth_sessions s JOIN users u ON u.id=s.user_id LEFT JOIN workspaces w ON w.id=s.workspace_id
    WHERE s.id=$1 AND u.id=$2 AND s.revoked_at IS NULL AND s.expires_at>now() AND NOT u.disabled
    AND s.version=u.session_version AND s.role=u.role AND s.workspace_id IS NOT DISTINCT FROM u.active_workspace_id
@@ -69,6 +71,13 @@ export const authenticate = async (
         error: "Your session expired. Sign in again.",
         code: "SESSION_EXPIRED",
       });
+    if (row.onesa_token !== null && row.onesa_token !== undefined) {
+      const config = identityConfig();
+      if (!config) throw new InactiveIdentity();
+      const identity = await liveIdentity(config, openToken(row.onesa_token));
+      if (identity.iss !== row.onesa_issuer || identity.sub !== row.onesa_subject)
+        throw new InactiveIdentity();
+    }
     req.user = {
       id: row.id,
       email: row.email,
@@ -78,7 +87,9 @@ export const authenticate = async (
       organizationId: row.dotnet_organization_id,
     };
     next();
-  } catch {
+  } catch (error) {
+    if (error instanceof InactiveIdentity)
+      return res.status(401).json({ error: "Your Onesa session expired. Sign in again.", code: "SESSION_EXPIRED" });
     res.status(503).json({ error: "Session verification unavailable" });
   }
 };

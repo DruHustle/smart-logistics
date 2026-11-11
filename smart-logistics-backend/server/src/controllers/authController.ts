@@ -7,19 +7,10 @@ import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth";
 import { getJwtSecret } from "../config/security";
 import { connection } from "../config/db";
-import { randomUUID, randomInt } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { queuePasswordReset } from "../services/resetDelivery";
 
-const authCookieOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production"
-      ? ("none" as const)
-      : ("lax" as const),
-  maxAge: 15 * 60 * 1000,
-  path: "/",
-});
+import { createSession, authCookieOptions } from "../services/authSession";
 
 const publicUser = (user: typeof users.$inferSelect) => ({
   id: String(user.id),
@@ -28,19 +19,6 @@ const publicUser = (user: typeof users.$inferSelect) => ({
   role: user.role,
 });
 
-async function createSession(user: typeof users.$inferSelect) {
-  const sid = randomUUID();
-  await connection.query(
-    `INSERT INTO auth_sessions(id,user_id,workspace_id,version,role,expires_at)
- VALUES($1,$2,$3,$4,$5,now()+interval '15 minutes')`,
-    [sid, user.id, user.activeWorkspaceId, user.sessionVersion, user.role],
-  );
-  return jwt.sign({ id: user.id, sid }, getJwtSecret(), {
-    expiresIn: "15m",
-    issuer: "imsop-api",
-    audience: "imsop-web",
-  });
-}
 export const login = async (req: Request, res: Response) => {
   try {
     const user = await db.query.users.findFirst({
@@ -106,7 +84,7 @@ export const sessionInfo = (req: AuthRequest, res: Response) =>
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
     await connection.query(
-      "UPDATE auth_sessions SET revoked_at=now() WHERE id=$1",
+      "UPDATE auth_sessions SET revoked_at=now(),onesa_token=NULL WHERE id=$1",
       [req.user!.sessionId],
     );
     res.clearCookie("imsop_access", {
@@ -169,7 +147,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   try {
     const result = await connection.query(
       `UPDATE users SET password=$1,password_reset_version=password_reset_version+1,session_version=session_version+1
-   WHERE id=$2 AND password_reset_version=$3 AND NOT disabled RETURNING id`,
+   WHERE id=$2 AND password_reset_version=$3 AND NOT disabled AND password<>'!onesa-managed' RETURNING id`,
       [
         await hashPassword(req.body.newPassword),
         decoded.id,
@@ -236,7 +214,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     const hashedPassword = await hashPassword(newPassword);
     const changed = await connection.query(
       `UPDATE users SET password=$1,password_reset_version=password_reset_version+1,session_version=session_version+1
-     WHERE id=$2 AND password_reset_version=$3 AND session_version=$4 AND NOT disabled RETURNING id`,
+     WHERE id=$2 AND password_reset_version=$3 AND session_version=$4 AND NOT disabled AND password<>'!onesa-managed' RETURNING id`,
       [hashedPassword, user.id, user.passwordResetVersion, user.sessionVersion],
     );
     if (changed.rowCount !== 1)

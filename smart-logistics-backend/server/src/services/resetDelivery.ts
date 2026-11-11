@@ -37,7 +37,7 @@ function decrypt(value: string) {
 export async function queuePasswordReset(email: string) {
   const user = (
     await connection.query(
-      "SELECT id,email,password_reset_version FROM users WHERE email=$1 AND NOT disabled",
+      "SELECT id,email,password_reset_version FROM users WHERE email=$1 AND NOT disabled AND password<>'!onesa-managed'",
       [email],
     )
   ).rows[0];

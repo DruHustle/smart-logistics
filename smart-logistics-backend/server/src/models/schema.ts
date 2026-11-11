@@ -18,6 +18,8 @@ export const users = pgTable("users", {
   password: varchar("password", { length: 255 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull().default("user"),
+  onesaIssuer: text("onesa_issuer"),
+  onesaSubject: uuid("onesa_subject"),
   activeWorkspaceId: uuid("active_workspace_id"),
   sessionVersion: integer("session_version").notNull().default(0),
   disabled: boolean("disabled").notNull().default(false),
