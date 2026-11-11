@@ -164,5 +164,6 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
     })
   ).json();
   assert.equal(localView.id, local.id);
-  assert.equal(localView.role, "analyst");
+  assert.equal(localView.role, "admin", "The live MFA Portal administrator has effective administrative access");
+  assert.equal((await connection.query("SELECT role FROM users WHERE id=$1", [local.id])).rows[0].role, "analyst", "Federation must preserve the linked account's stored local role");
 });
