@@ -12,6 +12,6 @@ export const release = {
     "immutable-mail-v1",
     "node-red-package-management-v1",
   ],
-  nodeSchema: "008_node_red_package_management.sql",
+  nodeSchema: "009_onesa_identity.sql",
   supplyChainSchema: "202610270002_PurchaseReceiving",
 };

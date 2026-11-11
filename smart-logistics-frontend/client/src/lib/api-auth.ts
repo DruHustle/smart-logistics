@@ -26,7 +26,9 @@ export class ApiAuthService implements IAuthService {
       }
       if (
         res.status === 401 &&
-        !["/api/auth/login", "/api/auth/me"].includes(path)
+        !["/api/auth/login", "/api/auth/me", "/api/auth/onesa/start"].includes(
+          path
+        )
       )
         window.dispatchEvent(new Event("imsop:session-expired"));
       if (!res.ok)
@@ -52,6 +54,23 @@ export class ApiAuthService implements IAuthService {
     } finally {
       clearTimeout(timeout);
     }
+  }
+  async onesaAvailable(): Promise<boolean> {
+    return (await this.fetchApi("/api/auth/onesa/config")).enabled === true;
+  }
+  async startOnesa(link?: { email: string; password: string }): Promise<void> {
+    if (safeSessionStorage.getItem("imsop:signout-pending"))
+      await this.logout();
+    const { url } = await this.fetchApi("/api/auth/onesa/start", {
+      method: "POST",
+      body: JSON.stringify(link ? { link } : {}),
+    });
+    const destination = new URL(url);
+    if (destination.protocol !== "https:")
+      throw Error("Invalid Onesa sign-in destination.");
+    getStorage().removeItem(TOKEN_KEY);
+    getStorage().removeItem(USER_KEY);
+    window.location.assign(destination.href);
   }
   async login(email: string, password: string): Promise<AuthResponse> {
     try {

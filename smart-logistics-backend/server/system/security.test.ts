@@ -608,7 +608,7 @@ test("migration upgrade preserves legacy rows; concurrent runners serialize and 
     assert.equal(
       (await pool.query("SELECT count(*)::int AS count FROM schema_migrations"))
         .rows[0].count,
-      9,
+      10,
     );
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "imsop-migration-"));
     try {
