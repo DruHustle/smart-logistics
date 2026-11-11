@@ -81,7 +81,7 @@ after(async () => {
   await connection.end();
 });
 
-test("current readiness requires the new ledger and retains the immutable-mail prerequisite", async () => {
+test("readiness requires the immutable-mail, Node-RED and identity migrations", async () => {
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -92,6 +92,7 @@ test("current readiness requires the new ledger and retains the immutable-mail p
     for (const name of [
       "007_immutable_mail.sql",
       "008_node_red_package_management.sql",
+      "009_onesa_identity.sql",
     ]) {
       const checksum = (
         await connection.query(
