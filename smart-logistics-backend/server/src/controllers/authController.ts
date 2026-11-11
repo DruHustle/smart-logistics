@@ -73,7 +73,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ user: publicUser(user) });
+    res.json({ user: { ...publicUser(user), role: req.user.role } });
   } catch (error) {
     res.status(500).json({ error: "Internal server error" });
   }

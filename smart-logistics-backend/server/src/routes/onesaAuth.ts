@@ -11,12 +11,14 @@ import {
   liveIdentity,
   randomValue,
   sealToken,
+  safeReturnPath,
 } from "../services/onesaIdentity";
 import { verifyPassword } from "../services/passwords";
 import { rateLimit } from "../middleware/rateLimit";
 
 const router = Router();
 const transactionCookie = "__Host-onesa_logistics_login";
+const returnCookie = "__Host-onesa_logistics_return";
 const cookieOptions = {
   secure: true,
   httpOnly: true,
@@ -41,7 +43,7 @@ router.post("/start", rateLimit(15 * 60_000, 15), async (req, res) => {
     return res.status(503).json({ error: "Onesa sign-in is unavailable." });
   if (req.headers.origin !== config.origin) return res.sendStatus(403);
   const input = z
-    .object({ link: localProof.optional() })
+    .object({ link: localProof.optional(), returnTo: z.string().max(2048).optional() })
     .strict()
     .safeParse(req.body);
   if (!input.success) return res.sendStatus(400);
@@ -76,6 +78,9 @@ router.post("/start", rateLimit(15 * 60_000, 15), async (req, res) => {
     ...cookieOptions,
     maxAge: 5 * 60_000,
   });
+  res.cookie(returnCookie, safeReturnPath(input.data.returnTo), {
+    ...cookieOptions, maxAge: 5 * 60_000,
+  });
   return res.json({ url: authorizationUrl(config, state, verifier) });
 });
 
@@ -108,6 +113,11 @@ router.get("/callback", async (req, res) => {
     );
     if (!txn) return retry("restart");
     res.clearCookie(transactionCookie, cookieOptions);
+    const encodedReturn = req.headers.cookie?.split(";").map(v => v.trim())
+      .find(v => v.startsWith(returnCookie + "="))?.slice(returnCookie.length + 1);
+    let returnTo = "#/";
+    try { returnTo = safeReturnPath(decodeURIComponent(encodedReturn ?? "")); } catch {}
+    res.clearCookie(returnCookie, cookieOptions);
     const token = await exchangeCode(config, query.data.code, txn.verifier);
     const identity = await liveIdentity(config, token);
     const email = identity.email.toLowerCase();
@@ -129,22 +139,22 @@ router.get("/callback", async (req, res) => {
     } = await connection.query(lookup, values);
     if (!user) {
       await connection.query(
-        `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role) VALUES($1,$2,$3,$4,'!onesa-managed','admin')
+        `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role) VALUES($1,$2,$3,$4,'!onesa-managed',$5)
          ON CONFLICT DO NOTHING`,
-        [...values, email, identity.name],
+        [...values, email, identity.name, identity.onesa_product_roles.logistics],
       );
       ({
         rows: [user],
       } = await connection.query(lookup, values));
     }
     if (!user) return retry("link");
-    if (user.disabled) return retry("denied");
+    if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied");
     res.cookie(
       "imsop_access",
       await createSession(user, sealToken(token)),
       authCookieOptions(),
     );
-    return res.redirect(303, config.origin + "/#/");
+    return res.redirect(303, config.origin + "/" + returnTo);
   } catch (error) {
     return retry(error instanceof InactiveIdentity ? "denied" : "unavailable");
   }

@@ -36,6 +36,7 @@ jobs:
         run: |
           pnpm -C server exec node --test --import tsx system/security.test.ts
           pnpm -C server exec node --test --import tsx system/onesa-identity.test.ts
+          pnpm -C server exec node --test --import tsx system/onesaIdentity.test.ts
       - name: Real gateway, mail sink and order outbox
         env:
           DATABASE_URL: postgresql://imsop_test:isolated-test-only@127.0.0.1:55467/imsop_test

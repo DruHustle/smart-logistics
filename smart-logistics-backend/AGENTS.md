@@ -1,5 +1,9 @@
 # Smart Logistics deployment image retention
 
+The parent `../AGENTS.md` owns shared toolchain, identity, evidence and workspace
+rules. This component remains part of the consolidated `DruHustle/smart-logistics`
+repository; use parent `local-tools/` paths for worktrees and release evidence.
+
 After every successful Docker image deployment, remove older unused Smart Logistics images
 on the deployment host, including local development and Oracle production.
 Retain the current images and one previously verified, compatible rollback per

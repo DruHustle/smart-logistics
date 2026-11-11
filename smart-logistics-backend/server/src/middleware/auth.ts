@@ -75,8 +75,11 @@ export const authenticate = async (
       const config = identityConfig();
       if (!config) throw new InactiveIdentity();
       const identity = await liveIdentity(config, openToken(row.onesa_token));
-      if (identity.iss !== row.onesa_issuer || identity.sub !== row.onesa_subject)
+      if (identity.iss !== row.onesa_issuer || identity.sub !== row.onesa_subject ||
+          (row.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
         throw new InactiveIdentity();
+      // Central administrators are checked live; ordinary accounts retain their local role and membership.
+      if (identity.onesa_product_roles.logistics === "admin") row.role = "admin";
     }
     req.user = {
       id: row.id,
@@ -88,8 +91,14 @@ export const authenticate = async (
     };
     next();
   } catch (error) {
-    if (error instanceof InactiveIdentity)
+    if (error instanceof InactiveIdentity) {
+      try {
+        await connection.query("UPDATE auth_sessions SET revoked_at=now(),onesa_token=NULL WHERE id=$1 AND user_id=$2", [claims.sid, claims.id]);
+      } catch {
+        return res.status(503).json({ error: "Session verification unavailable" });
+      }
       return res.status(401).json({ error: "Your Onesa session expired. Sign in again.", code: "SESSION_EXPIRED" });
+    }
     res.status(503).json({ error: "Session verification unavailable" });
   }
 };

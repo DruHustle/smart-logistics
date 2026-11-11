@@ -61,9 +61,16 @@ export class ApiAuthService implements IAuthService {
   async startOnesa(link?: { email: string; password: string }): Promise<void> {
     if (safeSessionStorage.getItem("imsop:signout-pending"))
       await this.logout();
+    const current = window.location.hash;
+    const returnTo = /^#\/(?!\/)/.test(current) &&
+      !/^#\/(?:login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(current)
+      ? current : safeSessionStorage.getItem("imsop:return-to") || "#/";
     const { url } = await this.fetchApi("/api/auth/onesa/start", {
       method: "POST",
-      body: JSON.stringify(link ? { link } : {}),
+      body: JSON.stringify({
+        ...(link ? { link } : {}),
+        returnTo,
+      }),
     });
     const destination = new URL(url);
     if (destination.protocol !== "https:")
