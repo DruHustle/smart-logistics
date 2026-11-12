@@ -250,19 +250,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <option value="demo">Demo</option>
               </select>
             </label>
-            {demoIdentity && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  await logout();
-                  navigate("/login?mode=demo");
-                }}
-              >
-                Demo accounts
-              </Button>
-            )}
             <ThemeSwitcher />
             <NotificationCenter />
             <DropdownMenu>
