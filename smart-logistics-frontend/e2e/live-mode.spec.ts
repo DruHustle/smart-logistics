@@ -8,6 +8,78 @@ import {
   liveOrder,
 } from "./helpers";
 
+test("the live form and an active demonstration both expose isolated demo accounts", async ({
+  page,
+}) => {
+  await isolate(page);
+  const liveRequests: string[] = [];
+  page.on("request", request => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      pathname === "/api/auth/login" ||
+      pathname.startsWith("/api/operations/")
+    )
+      liveRequests.push(pathname);
+  });
+  await page.goto("/#/login?mode=live");
+  await page.getByText("Demo accounts", { exact: true }).click();
+  const picker = page.getByRole("group", { name: "Demo accounts" });
+  const analyst = picker.getByRole("button", { name: "Analyst" });
+  await analyst.click();
+  await expect(analyst).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(
+    "analyst@imsop.io"
+  );
+  await expect(
+    page.getByText("Demo sign-in · Example data only")
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page.getByLabel("Data mode", { exact: true })).toHaveValue(
+    "demo"
+  );
+  await page
+    .getByRole("button", { name: "Demo accounts", exact: true })
+    .click();
+  await picker.getByRole("button", { name: "Demo", exact: true }).click();
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Operational overview" })
+  ).toBeVisible();
+  await page.goto("/#/infrastructure/health");
+  await expect(
+    page.getByRole("heading", { name: "Access denied" })
+  ).toBeVisible();
+  expect(liveRequests).toEqual([]);
+});
+
+test("editing a demo email clears its sample password before live sign-in", async ({
+  page,
+}) => {
+  await isolate(page);
+  const submissions: unknown[] = [];
+  await page.route("**/api/auth/login", route => {
+    submissions.push(route.request().postDataJSON());
+    return route.fulfill({ status: 401, json: { error: "Fixture rejection" } });
+  });
+  await page.goto("/#/login");
+  await page.getByRole("button", { name: "Admin", exact: true }).click();
+  const password = page.getByLabel("Password", { exact: true });
+  await expect(password).toHaveValue("admin123");
+  await page.getByLabel("Email", { exact: true }).fill("live@example.test");
+  await expect(password).toHaveValue("");
+  const submit = page.getByRole("button", { name: "Sign In", exact: true });
+  await submit.click();
+  await expect(password).toBeFocused();
+  expect(submissions).toEqual([]);
+  await password.fill("Live-fixture-only-123");
+  await submit.click();
+  await expect
+    .poll(() => submissions)
+    .toEqual([
+      { email: "live@example.test", password: "Live-fixture-only-123" },
+    ]);
+});
+
 test("demo Live selection requests real authentication, preserves the route and removes all demo evidence", async ({
   page,
 }) => {

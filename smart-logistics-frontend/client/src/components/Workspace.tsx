@@ -212,7 +212,9 @@ export function SourceNote({
   count?: number;
   total?: number;
 }) {
-  const { mode, lastShipmentReadAt, refresh } = useData();
+  const { mode, demoIdentity, lastShipmentReadAt, refresh } = useData();
+  const { logout } = useAuth();
+  const [, navigate] = useLocation();
   return (
     <div
       data-mode={mode}
@@ -228,6 +230,19 @@ export function SourceNote({
         {mode === "live" &&
           ` · Complete matching selection · Last read: ${formatTime(lastShipmentReadAt)}`}
       </span>
+      {demoIdentity && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await logout();
+            navigate("/login?mode=demo");
+          }}
+        >
+          Demo accounts
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="sm"
