@@ -141,7 +141,9 @@ export default function Login() {
             {signInMode === "demo"
               ? "Demo sign-in · Example data only"
               : liveRequested
-                ? "Sign in with your Onesa account to view live data."
+                ? hostedWorkspace
+                  ? "Sign in with your Onesa account to view live data."
+                  : "Sign in with your workspace account to view live data."
                 : "Live access uses your Onesa Company Portal account."}
           </p>
           {signInMode === "demo" && (
