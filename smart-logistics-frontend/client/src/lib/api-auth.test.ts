@@ -10,6 +10,7 @@ describe('API authentication availability', () => {
   });
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.useFakeTimers();
   });
   afterEach(() => {
@@ -43,5 +44,18 @@ describe('API authentication availability', () => {
     expect(await new ApiAuthService().getCurrentUser()).toEqual({ success: true, user });
     expect(fetchMock.mock.calls[0][1].credentials).toBe('include');
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('carries the protected deep link through Onesa sign-in instead of an older saved destination', async () => {
+    window.history.replaceState(null, '', '#/supply-chain/shipments/123/tracking?view=events');
+    sessionStorage.setItem('imsop:return-to', '#/profile');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ url: 'http://invalid.example' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    // Invalid issuer URL stops navigation after the request, allowing request assertions in jsdom.
+    await expect(new ApiAuthService().startOnesa()).rejects.toThrow('Invalid Onesa sign-in destination');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).returnTo).toBe('#/supply-chain/shipments/123/tracking?view=events');
+    window.history.replaceState(null, '', '#/login?mode=live');
+    await expect(new ApiAuthService().startOnesa()).rejects.toThrow('Invalid Onesa sign-in destination');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).returnTo).toBe('#/profile');
   });
 });

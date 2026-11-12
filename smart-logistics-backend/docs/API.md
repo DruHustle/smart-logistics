@@ -59,3 +59,18 @@ Supply-chain paths retain the `/supply-chain` gateway prefix and first-party Ver
 The implemented [forecast adapter contract](contracts/OPTIONAL_FORECAST_PROVIDER.md) describes source-observation import, bounded requests, strict response evidence and persisted scoped runs. It does not provision or invent an external model.
 
 Tracking-event reads expose only the stored event metadata plus `position: {lat,lng} | null` and normalized `status | null` from that specific event. Raw provider payloads remain private. Missing locations are never carried forward into historical replay; workspace/provider/tracking boundaries and the bounded event page remain enforced.
+
+## Shared Onesa account sessions
+
+`POST /api/auth/onesa/start` accepts optional `link` proof and `returnTo`, a
+bounded local hash route such as `#/supply-chain/shipments/123/tracking`.
+The browser-bound PKCE callback restores that destination; external, malformed
+and authentication routes fall back to `#/`. The short-lived return cookie is
+Secure, HttpOnly and host-only, and grants no record access.
+
+Approved Portal product role `user` creates a local `user` with no workspace
+membership. Existing issuer/subject accounts retain their local memberships and
+roles; matching email alone never links an account. Central `admin` requires
+`global_admin` plus MFA. Every authenticated request rechecks the central grant;
+revocation or an administrator downgrade rejects an elevated local session.
+An active central administrator's effective role is reflected by `/api/auth/me`.

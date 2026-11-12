@@ -120,7 +120,7 @@ const assertion = z.object({
   amr: z.array(z.string()),
   onesa_roles: z.array(z.string()),
   onesa_applications: z.array(z.string()),
-  onesa_product_roles: z.object({ logistics: z.literal("admin") }),
+  onesa_product_roles: z.object({ logistics: z.enum(["user", "admin"]) }),
 });
 export async function liveIdentity(config: Config, token: string) {
   const result = assertion.safeParse(
@@ -132,15 +132,23 @@ export async function liveIdentity(config: Config, token: string) {
   if (
     a.iss !== config.issuer ||
     a.aud !== config.client ||
-    a.exp <= now ||
+    a.exp <= now || a.exp > now + 86400 ||
     a.auth_time > now ||
     now - a.auth_time >= 28800 ||
     !a.onesa_applications.includes("logistics") ||
-    !a.onesa_roles.includes("global_admin") ||
-    !a.amr.some((v) => v === "otp" || v === "mfa")
+    a.onesa_roles.includes("global_admin") !== (a.onesa_product_roles.logistics === "admin") ||
+    (a.onesa_product_roles.logistics === "admin" && !a.amr.some((v) => v === "otp" || v === "mfa"))
   )
     throw new InactiveIdentity();
   return a;
+}
+
+// A return destination is navigation only; workspace/object access is checked separately.
+export function safeReturnPath(value: unknown): string {
+  if (typeof value !== "string" || value.length > 2048 ||
+      !/^#\/(?!\/)/.test(value) || /[\\\u0000-\u0020\u007f]/.test(value) ||
+      /^#\/(?:login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(value)) return "#/";
+  return value;
 }
 
 function storageKey() {
