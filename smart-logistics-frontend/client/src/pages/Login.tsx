@@ -1,3 +1,4 @@
+import { DEMO_ACCOUNTS, type DemoAccount } from "../../../shared/demo-accounts";
 import { useHashQuery } from "@/lib/hash-location";
 import { safeSessionStorage } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
@@ -82,19 +83,11 @@ export default function Login() {
     }
   }
 
-  const fillDemoCredentials = (role: string) => {
-    const credentials: Record<string, { email: string; password: string }> = {
-      admin: { email: "admin@imsop.io", password: "admin123" },
-      engineer: { email: "engineer@imsop.io", password: "engineer123" },
-      analyst: { email: "analyst@imsop.io", password: "analyst123" },
-      demo: { email: "demo@imsop.io", password: "demo123" },
-    };
-    const cred = credentials[role];
-    if (cred) {
-      setSignInMode("demo");
-      setEmail(cred.email);
-      setPassword(cred.password);
-    }
+  const fillDemoCredentials = (account: DemoAccount) => {
+    setSignInMode("demo");
+    setShowPassword(false);
+    setEmail(account.email);
+    setPassword(account.password);
   };
 
   return (
@@ -136,10 +129,10 @@ export default function Login() {
             role="status"
             className="text-sm text-center text-muted-foreground"
           >
-            {liveRequested
-              ? "Sign in with your workspace account to view live data."
-              : signInMode === "demo"
-                ? "Demo sign-in · Example data only"
+            {signInMode === "demo"
+              ? "Demo sign-in · Example data only"
+              : liveRequested
+                ? "Sign in with your workspace account to view live data."
                 : "Live sign-in · Use your workspace account"}
           </p>
           {signInMode === "demo" && (
@@ -268,53 +261,44 @@ export default function Login() {
             </button>
           </div>
 
-          {!liveRequested && (
-            <div className="space-y-3">
-              <p className="text-xs text-center text-muted-foreground">
-                Demo Accounts (click to fill):
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center">
+          <details
+            open={!liveRequested}
+            className="rounded-md border border-border p-3"
+          >
+            <summary className="cursor-pointer text-sm font-semibold">
+              Demo accounts
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Choose a role to fill the sign-in form. Each account uses sample
+              logistics data.
+            </p>
+            <div
+              role="group"
+              aria-label="Demo accounts"
+              className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            >
+              {DEMO_ACCOUNTS.map(account => (
                 <Button
+                  key={account.id}
+                  type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => fillDemoCredentials("admin")}
-                  className="text-xs"
+                  className="min-h-11 px-2 text-xs"
+                  title={account.description}
+                  aria-pressed={
+                    signInMode === "demo" && email === account.email
+                  }
+                  disabled={isLoading}
+                  onClick={() => fillDemoCredentials(account)}
                 >
-                  Admin
+                  {account.label}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fillDemoCredentials("engineer")}
-                  className="text-xs"
-                >
-                  Engineer
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fillDemoCredentials("analyst")}
-                  className="text-xs"
-                >
-                  Analyst
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fillDemoCredentials("demo")}
-                  className="text-xs"
-                >
-                  Demo
-                </Button>
-              </div>
+              ))}
             </div>
-          )}
+          </details>
 
           <div className="mt-6 text-center text-xs text-muted-foreground">
             <p>Protected by Smart Logistics Identity Service</p>
-            {!liveRequested && (
-              <p>Demo identities use isolated, labelled example data.</p>
-            )}
           </div>
         </CardContent>
       </Card>

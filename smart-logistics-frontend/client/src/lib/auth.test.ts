@@ -1,3 +1,4 @@
+import { DEMO_ACCOUNTS } from "../../../shared/demo-accounts";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { AuthServiceFactory } from "./auth-factory";
 import { safeLocalStorage } from "./storage";
@@ -62,6 +63,24 @@ describe("Auth Service", () => {
       expect(result.user).toBeDefined();
       expect(result.user?.email).toBe("admin@imsop.io");
     });
+
+    it.each(DEMO_ACCOUNTS)(
+      "the $label picker uses its actual isolated role",
+      async account => {
+        const result = await service.login(account.email, account.password);
+        expect(result).toEqual({
+          success: true,
+          user: {
+            id: account.id,
+            name: account.name,
+            email: account.email,
+            role: account.role,
+          },
+        });
+        expect((await service.getCurrentUser()).user).toEqual(result.user);
+        await service.logout();
+      }
+    );
 
     it("should fail with invalid credentials", async () => {
       const result = await service.login("invalid@email.com", "wrongpassword");

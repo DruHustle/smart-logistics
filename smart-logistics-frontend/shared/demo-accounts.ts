@@ -1,77 +1,97 @@
-/**
- * Demo Accounts Configuration for Smart Logistics
- * 
- * This file defines demo accounts available for testing and demonstration purposes.
- * These accounts are pre-populated in the database and can be used to quickly
- * access the application with different user roles.
- */
-
+/** Public walkthrough credentials for the browser-local sample workspace. */
 export interface DemoAccount {
+  id: string;
+  name: string;
   label: string;
   email: string;
   password: string;
-  role: 'admin' | 'user' | 'operator' | 'analyst';
+  role: "admin" | "engineer" | "analyst" | "user";
   description: string;
 }
 
-/**
- * Demo accounts available for the Smart Logistics application
- * 
- * These accounts are created during database setup and can be used for:
- * - Testing different user roles
- * - Demonstrations
- * - Development and debugging
- * 
- * Note: In production, these demo accounts should be disabled or removed.
- */
 export const DEMO_ACCOUNTS: DemoAccount[] = [
   {
-    label: 'Admin',
-    email: 'admin@demo.local',
-    password: 'demo-admin-password',
-    role: 'admin',
-    description: 'Full system access and administration',
+    id: "1",
+    name: "Admin User",
+    label: "Admin",
+    role: "admin",
+    email: "admin@imsop.io",
+    password: "admin123",
+    description: "Explore operations and administration with sample data",
   },
   {
-    label: 'Operator',
-    email: 'operator@demo.local',
-    password: 'demo-operator-password',
-    role: 'user',
-    description: 'Shipment tracking and operations',
+    id: "2",
+    name: "Engineer User",
+    label: "Engineer",
+    role: "engineer",
+    email: "engineer@imsop.io",
+    password: "engineer123",
+    description: "Explore sample integrations and service health",
   },
   {
-    label: 'Analyst',
-    email: 'analyst@demo.local',
-    password: 'demo-analyst-password',
-    role: 'analyst',
-    description: 'Analytics and reporting access',
+    id: "3",
+    name: "Analyst User",
+    label: "Analyst",
+    role: "analyst",
+    email: "analyst@imsop.io",
+    password: "analyst123",
+    description: "Explore shipment analytics with sample data",
   },
   {
-    label: 'Demo',
-    email: 'demo@demo.local',
-    password: 'demo-password',
-    role: 'user',
-    description: 'Limited demo access for testing',
+    id: "4",
+    name: "Demo User",
+    label: "Demo",
+    role: "user",
+    email: "demo@imsop.io",
+    password: "demo123",
+    description: "Track sample shipments as a workspace user",
   },
 ];
 
-/**
- * Get demo account by label
- */
-export function getDemoAccount(label: string): DemoAccount | undefined {
-  return DEMO_ACCOUNTS.find((account) => account.label.toLowerCase() === label.toLowerCase());
+// Retain previous local sessions and published demo.local credential pairs.
+export const DEMO_IDENTITIES: DemoAccount[] = [
+  ...DEMO_ACCOUNTS,
+  {
+    ...DEMO_ACCOUNTS[0],
+    id: "5",
+    name: "Admin Demo",
+    email: "admin@demo.local",
+    password: "demo-admin-password",
+  },
+  {
+    ...DEMO_ACCOUNTS[3],
+    id: "6",
+    name: "Operator Demo",
+    label: "Operator",
+    email: "operator@demo.local",
+    password: "demo-operator-password",
+  },
+  {
+    ...DEMO_ACCOUNTS[2],
+    id: "7",
+    name: "Analyst Demo",
+    email: "analyst@demo.local",
+    password: "demo-analyst-password",
+  },
+  {
+    ...DEMO_ACCOUNTS[3],
+    id: "8",
+    name: "Demo User",
+    email: "demo@demo.local",
+    password: "demo-password",
+  },
+];
+
+export function getDemoAccount(label: string) {
+  return DEMO_IDENTITIES.find(
+    account => account.label.toLowerCase() === label.toLowerCase()
+  );
 }
 
-/**
- * Get all demo accounts
- */
-export function getAllDemoAccounts(): DemoAccount[] {
+export function getAllDemoAccounts() {
   return DEMO_ACCOUNTS;
 }
 
-/**
- * Check if an email is a demo account
- */
-export function isDemoAccount(email: string): boolean {
-  return DEMO_ACCOUNTS.some((account) => account.email === email);
+export function isDemoAccount(email: string) {
+  return DEMO_IDENTITIES.some(account => account.email === email);
 }
