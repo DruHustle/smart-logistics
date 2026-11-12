@@ -1,3 +1,4 @@
+import { hostedWorkspace, portalAccount } from "@/lib/portal-account";
 import {
   Card,
   CardContent,
@@ -266,86 +267,96 @@ export default function Profile() {
                   Change your account password.
                 </p>
               </div>
-              <Dialog
-                open={isPasswordDialogOpen}
-                onOpenChange={setIsPasswordDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="border-border hover:bg-muted"
-                  >
-                    Change Password
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="glass border-border">
-                  <DialogHeader>
-                    <DialogTitle>Change Password</DialogTitle>
-                    <DialogDescription>
-                      {demoIdentity
-                        ? "Validate the demo flow; published demo credentials remain fixed."
-                        : "Enter your current password and choose a new password (12–128 characters)."}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="current-password">Current Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="current-password"
-                          type={showPasswords ? "text" : "password"}
-                          value={currentPassword}
-                          onChange={e => setCurrentPassword(e.target.value)}
-                          className="bg-muted border-border pr-10"
-                        />
-                        <button
-                          type="button"
-                          aria-label={
-                            showPasswords ? "Hide passwords" : "Show passwords"
-                          }
-                          onClick={() => setShowPasswords(!showPasswords)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showPasswords ? (
-                            <EyeOff className="w-4 h-4" />
-                          ) : (
-                            <Eye className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="new-password">New Password</Label>
-                      <Input
-                        id="new-password"
-                        type={showPasswords ? "text" : "password"}
-                        value={newPassword}
-                        onChange={e => setNewPassword(e.target.value)}
-                        className="bg-muted border-border"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password">
-                        Confirm New Password
-                      </Label>
-                      <Input
-                        id="confirm-password"
-                        type={showPasswords ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={e => setConfirmPassword(e.target.value)}
-                        className="bg-muted border-border"
-                      />
-                    </div>
+              {hostedWorkspace && !demoIdentity ? (
+                <a className="underline" href={portalAccount + "/security"}>
+                  Manage Onesa account security
+                </a>
+              ) : (
+                <Dialog
+                  open={isPasswordDialogOpen}
+                  onOpenChange={setIsPasswordDialogOpen}
+                >
+                  <DialogTrigger asChild>
                     <Button
-                      onClick={handlePasswordChange}
-                      disabled={isChangingPassword}
-                      className="w-full"
+                      variant="outline"
+                      className="border-border hover:bg-muted"
                     >
-                      {isChangingPassword ? "Changing..." : "Change Password"}
+                      Change Password
                     </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent className="glass border-border">
+                    <DialogHeader>
+                      <DialogTitle>Change Password</DialogTitle>
+                      <DialogDescription>
+                        {demoIdentity
+                          ? "Validate the demo flow; published demo credentials remain fixed."
+                          : "Enter your current password and choose a new password (12–128 characters)."}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="current-password">
+                          Current Password
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="current-password"
+                            type={showPasswords ? "text" : "password"}
+                            value={currentPassword}
+                            onChange={e => setCurrentPassword(e.target.value)}
+                            className="bg-muted border-border pr-10"
+                          />
+                          <button
+                            type="button"
+                            aria-label={
+                              showPasswords
+                                ? "Hide passwords"
+                                : "Show passwords"
+                            }
+                            onClick={() => setShowPasswords(!showPasswords)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showPasswords ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-password">New Password</Label>
+                        <Input
+                          id="new-password"
+                          type={showPasswords ? "text" : "password"}
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          className="bg-muted border-border"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirm-password">
+                          Confirm New Password
+                        </Label>
+                        <Input
+                          id="confirm-password"
+                          type={showPasswords ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          className="bg-muted border-border"
+                        />
+                      </div>
+                      <Button
+                        onClick={handlePasswordChange}
+                        disabled={isChangingPassword}
+                        className="w-full"
+                      >
+                        {isChangingPassword ? "Changing..." : "Change Password"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">

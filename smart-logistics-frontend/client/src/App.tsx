@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch, Router as WouterRouter, Redirect } from "wouter";
-import { lazy, Suspense } from "react";
+import { hostedWorkspace, portalAccount } from "./lib/portal-account";
+import { lazy, Suspense, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider, PreferencesProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -46,9 +47,29 @@ function LegacyRedirect({ href }: { href: string }) {
   const q = useHashQuery().toString();
   return <Redirect to={href + (q ? "?" + q : "")} replace />;
 }
+function PortalAccountRedirect({ register }: { register: boolean }) {
+  const url = portalAccount + (register ? "/register" : "/security");
+  useEffect(() => {
+    window.location.replace(url);
+  }, [url]);
+  return <a href={url}>Continue to your Onesa account</a>;
+}
+
 function WorkspaceRouter() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [location] = useWorkspaceLocation();
+  const path = location.split("?")[0];
+  if (
+    hostedWorkspace &&
+    [
+      "/register",
+      "/forgot-password",
+      "/reset-password",
+      "/account/password",
+    ].includes(path)
+  )
+    return <PortalAccountRedirect register={path === "/register"} />;
+
   if (location === "/reset-password")
     return (
       <Suspense fallback={loading}>

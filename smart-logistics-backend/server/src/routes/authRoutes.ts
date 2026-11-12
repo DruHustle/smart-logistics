@@ -20,6 +20,15 @@ import onesaAuth from "./onesaAuth";
 const router = Router();
 router.use("/onesa", onesaAuth);
 
+// Legacy credentials may prove ownership during Portal linking, never open a hosted session.
+router.use(["/login", "/register", "/request-reset", "/reset-password", "/change-password"], (_req, res, next) => {
+  if (process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true") {
+    res.status(403).json({ code: "PORTAL_ACCOUNT_REQUIRED", error: "Use your Onesa Company Portal account." });
+    return;
+  }
+  next();
+});
+
 const password = z.string().min(12).max(128);
 const email = z
   .string()
