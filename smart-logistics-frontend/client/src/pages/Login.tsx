@@ -181,6 +181,7 @@ export default function Login() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={e => {
+                    if (signInMode === "demo") setPassword("");
                     setEmail(e.target.value);
                     setSignInMode("live");
                   }}
@@ -236,17 +237,19 @@ export default function Login() {
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
-            {onesaEnabled && onesaResult === "link" && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={isLoading || !email || !password}
-                onClick={() => void signInWithOnesa(true)}
-              >
-                Link account with Onesa
-              </Button>
-            )}
+            {onesaEnabled &&
+              signInMode === "live" &&
+              onesaResult === "link" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={isLoading || !email || !password}
+                  onClick={() => void signInWithOnesa(true)}
+                >
+                  Link account with Onesa
+                </Button>
+              )}
           </form>
 
           <div className="text-center text-sm">
