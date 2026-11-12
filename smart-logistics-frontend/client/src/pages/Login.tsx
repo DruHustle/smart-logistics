@@ -1,6 +1,7 @@
 import { DEMO_ACCOUNTS, type DemoAccount } from "../../../shared/demo-accounts";
 import { useHashQuery } from "@/lib/hash-location";
 import { safeSessionStorage } from "@/lib/storage";
+import { hostedWorkspace, portalAccount } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,7 +25,7 @@ export default function Login() {
   const query = useHashQuery();
   const liveRequested = query.get("mode") === "live";
   const onesaResult = query.get("onesa");
-  const [onesaEnabled, setOnesaEnabled] = useState(false);
+  const [onesaEnabled, setOnesaEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     let active = true;
     apiAuthService
@@ -32,7 +33,9 @@ export default function Login() {
       .then(enabled => {
         if (active) setOnesaEnabled(enabled);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setOnesaEnabled(false);
+      });
     return () => {
       active = false;
     };
@@ -43,8 +46,14 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const linkRequested = onesaEnabled && onesaResult === "link";
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (hostedWorkspace && signInMode === "live") {
+      if (linkRequested) await signInWithOnesa(true);
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -132,8 +141,8 @@ export default function Login() {
             {signInMode === "demo"
               ? "Demo sign-in · Example data only"
               : liveRequested
-                ? "Sign in with your workspace account to view live data."
-                : "Live sign-in · Use your workspace account"}
+                ? "Sign in with your Onesa account to view live data."
+                : "Live access uses your Onesa Company Portal account."}
           </p>
           {signInMode === "demo" && (
             <Button
@@ -159,7 +168,7 @@ export default function Login() {
                     : "This sign-in has expired. Please start again."}
             </p>
           )}
-          {onesaEnabled && signInMode === "live" && (
+          {(hostedWorkspace || onesaEnabled) && signInMode === "live" && (
             <Button
               variant="outline"
               className="w-full"
@@ -169,95 +178,123 @@ export default function Login() {
               Sign in with Onesa
             </Button>
           )}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={e => {
-                    if (signInMode === "demo") setPassword("");
-                    setEmail(e.target.value);
-                    setSignInMode("live");
-                  }}
-                  className="pl-10 bg-background/50 border-border"
-                  required
-                />
+          {hostedWorkspace &&
+            onesaEnabled === false &&
+            signInMode === "live" && (
+              <p role="status">
+                The shared sign-in service is not connected. You can retry or
+                manage your account in Company Portal.
+              </p>
+            )}
+          {(!hostedWorkspace || signInMode === "demo" || linkRequested) && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    readOnly={hostedWorkspace && signInMode === "demo"}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={e => {
+                      if (hostedWorkspace && signInMode === "demo") return;
+                      if (signInMode === "demo") setPassword("");
+                      setEmail(e.target.value);
+                      setSignInMode("live");
+                    }}
+                    className="pl-10 bg-background/50 border-border"
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <button
-                  type="button"
-                  onClick={() => navigate("/forgot-password")}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Forgot password?
-                </button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      hostedWorkspace
+                        ? window.location.assign(portalAccount + "/security")
+                        : navigate("/forgot-password")
+                    }
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    readOnly={hostedWorkspace && signInMode === "demo"}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="h-11 pl-10 pr-12 bg-background/50 border-border"
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="h-11 pl-10 pr-12 bg-background/50 border-border"
-                  required
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/80 text-primary-foreground "
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-            {onesaEnabled &&
-              signInMode === "live" &&
-              onesaResult === "link" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  disabled={isLoading || !email || !password}
-                  onClick={() => void signInWithOnesa(true)}
-                >
-                  Link account with Onesa
-                </Button>
-              )}
-          </form>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-primary hover:bg-primary/80 text-primary-foreground "
+              >
+                {isLoading
+                  ? "Signing in..."
+                  : hostedWorkspace && linkRequested && signInMode === "live"
+                    ? "Link account with Onesa"
+                    : "Sign In"}
+              </Button>
+              {!hostedWorkspace &&
+                onesaEnabled &&
+                signInMode === "live" &&
+                onesaResult === "link" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={isLoading || !email || !password}
+                    onClick={() => void signInWithOnesa(true)}
+                  >
+                    Link account with Onesa
+                  </Button>
+                )}
+            </form>
+          )}
 
           <div className="text-center text-sm">
             <span className="text-muted-foreground">
               Don't have an account?{" "}
             </span>
             <button
-              onClick={() => navigate("/register")}
+              onClick={() =>
+                hostedWorkspace
+                  ? window.location.assign(portalAccount + "/register")
+                  : navigate("/register")
+              }
               className="text-primary hover:underline font-semibold"
             >
               Sign Up
@@ -301,7 +338,7 @@ export default function Login() {
           </details>
 
           <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Protected by Smart Logistics Identity Service</p>
+            <p>Account access through Onesa Company Portal</p>
           </div>
         </CardContent>
       </Card>

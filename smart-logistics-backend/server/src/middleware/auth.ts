@@ -71,6 +71,8 @@ export const authenticate = async (
         error: "Your session expired. Sign in again.",
         code: "SESSION_EXPIRED",
       });
+    if (!row.onesa_token && (process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true"))
+      throw new InactiveIdentity();
     if (row.onesa_token !== null && row.onesa_token !== undefined) {
       const config = identityConfig();
       if (!config) throw new InactiveIdentity();
