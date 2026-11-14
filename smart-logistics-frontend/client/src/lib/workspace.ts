@@ -78,6 +78,7 @@ export interface OperationalOrder {
 }
 // PurchaseOrder GUIDs and envelopes are intentionally not accepted by this adapter.
 export interface TrackingEvent {
+  source?: "workspace operator";
   position?: {lat:number;lng:number} | null;
   status?: string | null;
   id: string;

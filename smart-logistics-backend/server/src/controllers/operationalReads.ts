@@ -327,7 +327,7 @@ export async function shipmentEvents(req: AuthRequest, res: Response) {
         };
         return {
           ...item,
-          source: typeof event?.operatorId === "number" ? "workspace operator" : "provider",
+          ...(typeof event?.operatorId === "number" ? {source: "workspace operator"} : {}),
           position,
           status:
             typeof event?.status === "string"

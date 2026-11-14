@@ -194,7 +194,7 @@ function Detail({ kind, id, tracking = false }: Props) {
                         Source:{" "}
                         {mode === "demo"
                           ? "Demo event fixture"
-                          : "node.logistics_events"}{" "}
+                          : e.source ?? "node.logistics_events"}{" "}
                         · Event #{e.id}
                       </p>
                     </article>
