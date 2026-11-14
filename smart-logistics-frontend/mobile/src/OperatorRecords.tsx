@@ -133,7 +133,9 @@ async function readPage(session: string, page: number) {
     rows: data.items.map((s: Shipment) => ({
       key: String(s.id),
       title: s.trackingNumber,
-      note: [s.origin + " → " + s.destination, s.status].join(" · "),
+      note: [s.origin + " → " + s.destination, "Tracking: " + s.status].join(
+        " · "
+      ),
     })),
     more: (page + 1) * 25 < data.total,
   };
@@ -162,7 +164,7 @@ async function readDetail(session: string, key: string) {
   );
   return [
     s.origin + " → " + s.destination,
-    "Shipment status: " + s.status,
+    "Last carrier status: " + (s.carrierStatus || "No carrier update recorded"),
     ...(events.length ? events : ["No tracking events recorded."]),
   ];
 }

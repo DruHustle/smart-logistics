@@ -645,7 +645,9 @@ test("outbound stock maintains the canonical ledger under parallel grants, retri
  const delivery={...body,action:"deliver",observation:"recipient test evidence ABC-34"};
  assert.equal((await call(a,path,"POST",delivery,randomUUID())).status,200);
  assert.deepEqual(await balance(),[3,0,3]);
- const record=await (await call(a,path)).json();assert.equal(record.allocations[0].state,"delivered");
+ const record=await (await call(a,path)).json();assert.equal(record.allocations[0].state,"delivered");assert.equal(record.operationalStatus,"Delivered");
+ const status=await (await call(a,path+"/status")).json();assert.equal(status.operationalStatus,"Delivered");
+ const carrier=await (await call(a,"/api/operations/shipments/"+created[0].id)).json();assert.equal(carrier.carrierStatus,null);
  const events=await db.query("SELECT action,observation FROM supply_chain.shipment_stock_events WHERE allocation_id=$1",[saved[0].allocationId]);
  assert.equal(events.rowCount,3);assert(events.rows.some(e=>e.observation===delivery.observation));
 });

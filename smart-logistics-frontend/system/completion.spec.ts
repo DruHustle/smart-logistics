@@ -136,6 +136,12 @@ test("real purchasing, warehouse receiving, email opt-in and validated provider 
   await expect(
     movement.getByText(/Isolated recipient proof REF-318/)
   ).toBeVisible();
+  await expect(
+    page.getByText("Operational fulfillment: Delivered", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("No carrier update recorded", { exact: true })
+  ).toBeVisible();
   await page.goto("/#/settings");
   await expect(
     page.getByRole("switch", { name: "Review activity emails", exact: true })

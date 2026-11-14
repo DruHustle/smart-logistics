@@ -14,6 +14,7 @@ type Allocation = {
   state: string;
 };
 type Snapshot = {
+  operationalStatus: string;
   stock: Stock[];
   allocations: Allocation[];
   hasMore: boolean;
@@ -31,6 +32,7 @@ type Form = {
   observation: string;
 };
 export function ShipmentStock({ shipment }: { shipment: string }) {
+  const [operationalStatus, setOperationalStatus] = useState("Loading");
   const [open, setOpen] = useState(false),
     [page, setPage] = useState(0),
     [data, setData] = useState<Snapshot | null>(null),
@@ -45,12 +47,29 @@ export function ShipmentStock({ shipment }: { shipment: string }) {
     intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const path = "/supply-chain/api/v1/shipment-stock/" + shipment;
   useEffect(() => {
+    let current = true;
+    setOperationalStatus("Loading");
+    requestJSON(path + "/status")
+      .then((result: { operationalStatus: string }) => {
+        if (current) setOperationalStatus(result.operationalStatus);
+      })
+      .catch(() => {
+        if (current) setOperationalStatus("Unavailable");
+      });
+    return () => {
+      current = false;
+    };
+  }, [path, refresh]);
+  useEffect(() => {
     if (!open) return;
     let current = true;
     setData(null);
     requestJSON(path + "?offset=" + page * 50)
       .then((result: Snapshot) => {
-        if (current) setData(result);
+        if (current) {
+          setData(result);
+          setOperationalStatus(result.operationalStatus);
+        }
       })
       .catch((error: Error) => {
         if (current) setMessage(error.message);
@@ -113,6 +132,7 @@ export function ShipmentStock({ shipment }: { shipment: string }) {
 
   return (
     <section aria-label="Shipment stock movements">
+      <p aria-live="polite">Operational fulfillment: {operationalStatus}</p>
       <button type="button" onClick={() => setOpen(!open)}>
         {open ? "Close shipment stock" : "Shipment stock and handover"}
       </button>

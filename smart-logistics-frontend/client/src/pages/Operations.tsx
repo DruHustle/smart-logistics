@@ -293,7 +293,9 @@ export default function Operations() {
                       <th style={{ width: "27%" }}>Route</th>
                       <th style={{ width: "16%" }}>Carrier / mode</th>
                       <th style={{ width: "19%" }}>ETA / observation</th>
-                      <th style={{ width: "14%" }}>Status</th>
+                      <th style={{ width: "14%" }}>
+                        {mode === "live" ? "Tracking status" : "Status"}
+                      </th>
                       <th style={{ width: "5%" }}>
                         <span className="sr-only">Open</span>
                       </th>
@@ -425,7 +427,10 @@ export default function Operations() {
             { key: "id", label: "Stable record ID" },
             { key: "origin", label: "Origin" },
             { key: "destination", label: "Destination" },
-            { key: "status", label: "Status" },
+            {
+              key: "status",
+              label: mode === "live" ? "Tracking status" : "Status",
+            },
             { key: "carrier", label: "Carrier" },
             { key: "transportMode", label: "Transport mode" },
             { key: "estimatedArrival", label: "ETA" },

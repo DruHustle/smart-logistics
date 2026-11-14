@@ -194,7 +194,7 @@ function Detail({ kind, id, tracking = false }: Props) {
                         Source:{" "}
                         {mode === "demo"
                           ? "Demo event fixture"
-                          : e.source ?? "node.logistics_events"}{" "}
+                          : (e.source ?? "node.logistics_events")}{" "}
                         · Event #{e.id}
                       </p>
                     </article>
@@ -229,9 +229,25 @@ function Detail({ kind, id, tracking = false }: Props) {
               <Panel title="Overview">
                 <dl className="detail-grid">
                   <div>
-                    <dt>Status</dt>
+                    <dt>
+                      {shipment && mode === "live"
+                        ? "Last carrier status"
+                        : "Status"}
+                    </dt>
                     <dd>
-                      <StatusBadge value={record.status} />
+                      {shipment &&
+                      mode === "live" &&
+                      !shipment.carrierStatus ? (
+                        "No carrier update recorded"
+                      ) : (
+                        <StatusBadge
+                          value={
+                            shipment && mode === "live"
+                              ? shipment.carrierStatus!
+                              : record.status
+                          }
+                        />
+                      )}
                     </dd>
                   </div>
                   <div>

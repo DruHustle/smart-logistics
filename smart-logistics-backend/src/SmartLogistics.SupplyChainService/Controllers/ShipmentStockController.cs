@@ -28,7 +28,7 @@ public sealed class MovementEvidence {
 public sealed class SavedMovement {
  public Guid Id {get;set;} public string RequestHash {get;set;}=""; public string Action {get;set;}="";
 }
-[ApiController,Authorize(Roles="admin,engineer,analyst"),Route("api/v1/shipment-stock/{shipmentId:int:min(1)}")]
+[ApiController,Authorize,Route("api/v1/shipment-stock/{shipmentId:int:min(1)}")]
 public class ShipmentStockController(ApplicationDbContext db,IHttpClientFactory clients,IConfiguration config):ControllerBase {
  // The carrier projection is owned by Node and may use a different PostgreSQL database.
  // Pass the verified operator's credential through its tenant-scoped read boundary.
@@ -52,7 +52,23 @@ public class ShipmentStockController(ApplicationDbContext db,IHttpClientFactory 
  SELECT id AS "Id",inventory_id AS "InventoryId",quantity AS "Quantity",state AS "State" FROM supply_chain.shipment_allocations
  WHERE organization_id={org} AND workspace_id={workspace} AND shipment_id={shipmentId}
  """);
- [HttpGet]
+ static string Status(IReadOnlyList<ShipmentAllocation> rows) {
+  var active=rows.Where(a=>a.State!="released").ToArray();
+  if(active.Length==0)return rows.Count==0?"Not allocated":"Released";
+  if(active.All(a=>a.State=="delivered"))return "Delivered";
+  if(active.Any(a=>a.State=="delivered"))return "Partially delivered";
+  if(active.All(a=>a.State=="dispatched"))return "Dispatched";
+  if(active.Any(a=>a.State=="dispatched"))return "Partially dispatched";
+  return "Reserved";
+ }
+ [HttpGet("status"),Authorize(Roles="admin,engineer,analyst,user")]
+ public async Task<IActionResult> Fulfillment(int shipmentId,CancellationToken ct) {
+  if(db.OrganizationId is not Guid org||!Guid.TryParse(User.FindFirstValue("workspace_id"),out var workspace))return Forbid();
+  var error=await VerifyShipment(shipmentId,false,ct);if(error!=null)return error;
+  var rows=await Allocations(org,workspace,shipmentId).ToListAsync(ct);
+  return Ok(new{operationalStatus=Status(rows)});
+ }
+ [HttpGet,Authorize(Roles="admin,engineer,analyst")]
  public async Task<IActionResult> Snapshot(int shipmentId,[FromQuery]int offset=0,CancellationToken ct=default) {
   if(db.OrganizationId is not Guid org||!Guid.TryParse(User.FindFirstValue("workspace_id"),out var workspace))return Forbid();
   if(offset<0||offset>1000000)return BadRequest();
@@ -67,7 +83,7 @@ public class ShipmentStockController(ApplicationDbContext db,IHttpClientFactory 
    WHERE a.organization_id={org} AND a.workspace_id={workspace} AND a.shipment_id={shipmentId}
    ORDER BY e.recorded_at DESC,e.id DESC LIMIT 100
    """).ToListAsync(ct);
-  return Ok(new{stock=sources.Take(50),hasMore=sources.Count>50,allocations,events});
+  return Ok(new{stock=sources.Take(50),hasMore=sources.Count>50,operationalStatus=Status(allocations),allocations,events});
  }
  [HttpPost,Authorize(Roles="admin,engineer")]
  public async Task<IActionResult> Move(int shipmentId,StockMovement request,[FromHeader(Name="Idempotency-Key")]string? key,CancellationToken ct){
