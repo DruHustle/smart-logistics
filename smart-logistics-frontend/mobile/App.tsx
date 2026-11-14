@@ -28,6 +28,9 @@ import {
   type Item,
 } from "./src/api";
 
+import { Receiving } from "./src/Receiving";
+import { OperatorRecords } from "./src/OperatorRecords";
+
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [destination, setDestination] = useState<string | null>(null);
@@ -190,6 +193,10 @@ export default function App() {
             </View>
           ) : (
             <View style={styles.section}>
+              {!destination && <Receiving session={token} onError={fail} />}
+              {!destination && (
+                <OperatorRecords session={token} onError={fail} />
+              )}
               {destination && (
                 <Button
                   title={"Back to " + queue.toLowerCase()}

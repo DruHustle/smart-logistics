@@ -1,12 +1,18 @@
 import { origin } from "./config";
 
 export class SessionExpired extends Error {}
-export async function request(session: string, path: string, body?: unknown) {
+export async function request(
+  session: string,
+  path: string,
+  body?: unknown,
+  idempotencyKey?: string
+) {
   const response = await fetch(origin + path, {
     method: body === undefined ? "GET" : "POST",
     headers: {
       Authorization: "Bearer " + session,
       "Content-Type": "application/json",
+      ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
