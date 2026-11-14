@@ -49,6 +49,7 @@ import { User } from "./auth-types";
 export type Mode = "live" | "demo";
 export type SourceStatus = "loading" | "ready" | "forbidden" | "unavailable";
 export interface Shipment {
+  carrierStatus?: string | null;
   id: string;
   trackingNumber: string;
   origin: string;
@@ -78,6 +79,7 @@ export interface OperationalOrder {
 }
 // PurchaseOrder GUIDs and envelopes are intentionally not accepted by this adapter.
 export interface TrackingEvent {
+  source?: "workspace operator";
   position?: {lat:number;lng:number} | null;
   status?: string | null;
   id: string;
@@ -135,6 +137,7 @@ export function normalizeShipment(raw: Record<string, unknown>): Shipment {
   return {
     id: String(raw.id),
     trackingNumber: text(raw.trackingNumber),
+    carrierStatus: typeof raw.carrierStatus === "string" ? raw.carrierStatus : null,
     origin: text(raw.origin),
     destination: text(raw.destination),
     status: statusLabel(raw.status),

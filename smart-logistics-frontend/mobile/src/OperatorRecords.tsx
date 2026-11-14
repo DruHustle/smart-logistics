@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ActivityIndicator, Button, Text, View } from "react-native";
+import { CreateShipment } from "./CreateShipment";
+import { ShipmentStock } from "./ShipmentStock";
 import { request } from "./api";
 
 type Card = { key: string; title: string; note: string };
@@ -72,12 +74,20 @@ export function OperatorRecords({
           ) : selected ? (
             <>
               <Button title="Back to list" onPress={() => setSelected(null)} />
+              <ShipmentStock shipment={selected} session={session} />
               {history.map((v, i) => (
                 <Text key={i}>{v}</Text>
               ))}
             </>
           ) : (
             <>
+              <CreateShipment
+                session={session}
+                onCreated={id => {
+                  setSelected(id);
+                  setRefresh(n => n + 1);
+                }}
+              />
               {rows.map(r => (
                 <View key={r.key}>
                   <Button title={r.title} onPress={() => setSelected(r.key)} />
@@ -123,7 +133,9 @@ async function readPage(session: string, page: number) {
     rows: data.items.map((s: Shipment) => ({
       key: String(s.id),
       title: s.trackingNumber,
-      note: [s.origin + " → " + s.destination, s.status].join(" · "),
+      note: [s.origin + " → " + s.destination, "Tracking: " + s.status].join(
+        " · "
+      ),
     })),
     more: (page + 1) * 25 < data.total,
   };
@@ -138,11 +150,12 @@ async function readDetail(session: string, key: string) {
       eventType: string;
       occurredAt: string;
       provider: string;
+      source?: string;
       position?: { lat: number; lng: number };
     }) =>
       [
         e.occurredAt,
-        e.provider,
+        [e.provider, e.source].filter(Boolean).join(" / "),
         e.eventType,
         e.position && e.position.lat + ", " + e.position.lng,
       ]
@@ -151,7 +164,7 @@ async function readDetail(session: string, key: string) {
   );
   return [
     s.origin + " → " + s.destination,
-    "Shipment status: " + s.status,
+    "Last carrier status: " + (s.carrierStatus || "No carrier update recorded"),
     ...(events.length ? events : ["No tracking events recorded."]),
   ];
 }

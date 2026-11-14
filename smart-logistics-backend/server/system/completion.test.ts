@@ -616,3 +616,38 @@ test("purchase pages and catalogs expose records beyond their first bounded page
     400,
   );
 });
+
+test("outbound stock maintains the canonical ledger under parallel grants, retries and delivery confirmation", async()=>{
+ const draft={trackingNumber:randomUUID(),origin:"Dock A",destination:"Site B"},createPath="/api/operations/shipments",createKey=randomUUID();
+ assert.equal((await call(user,createPath,"POST",draft,randomUUID())).status,403);
+ assert.equal((await call(a,createPath,"POST",{...draft,provider:"another-workspace-carrier"},randomUUID())).status,404);
+ const attempts=await Promise.all([call(a,createPath,"POST",draft,createKey),call(a,createPath,"POST",draft,createKey)]);
+ assert.deepEqual(attempts.map(r=>r.status).sort(),[200,201]);const created=await Promise.all(attempts.map(r=>r.json()));assert.equal(created[0].id,created[1].id);
+ assert.equal((await call(a,createPath,"POST",{...draft,destination:"Different"},createKey)).status,409);
+ assert.equal((await call(a,createPath,"POST",draft,randomUUID())).status,409);
+ const stock=randomUUID();
+ await db.query("INSERT INTO supply_chain.inventories(id,organization_id,warehouse_id,product_id,quantity_on_hand,quantity_reserved) VALUES($1,$2,$3,$4,8,0)",[stock,a.org,a.warehouse,a.product]);
+ const path="/supply-chain/api/v1/shipment-stock/"+created[0].id,body={action:"reserve",inventoryId:stock,quantity:5,observation:"isolated dock observation"},key=randomUUID();
+ const balance=async()=>{const r=await db.query("SELECT quantity_on_hand,quantity_reserved,quantity_available FROM supply_chain.inventories WHERE id=$1",[stock]);return Object.values(r.rows[0]);};
+ assert.equal((await call(user,path,"POST",body,randomUUID())).status,403);
+ assert.equal((await call(b,path,"POST",body,randomUUID())).status,404);
+ assert.equal((await call(a,path,"POST",{...body,quantity:9},randomUUID())).status,409);
+ const replies=await Promise.all([call(a,path,"POST",body,key),call(a,path,"POST",body,key)]);
+ for(const r of replies)assert.equal(r.status,200,await r.clone().text());
+ const saved=await Promise.all(replies.map(r=>r.json()));assert.equal(saved[0].allocationId,saved[1].allocationId);assert.deepEqual(saved.map(x=>x.duplicate).sort(),[false,true]);
+ assert.deepEqual(await balance(),[8,5,3]);
+ assert.equal((await call(a,path,"POST",{...body,quantity:4},key)).status,409);
+ assert.equal((await call(a,path,"POST",{...body,action:"deliver"},randomUUID())).status,409);
+ const dispatch={...body,action:"dispatch",observation:"dock handover reference 34"};
+ assert.equal((await call(a,path,"POST",dispatch,randomUUID())).status,200);
+ assert.deepEqual(await balance(),[3,0,3]);
+ assert.equal((await call(a,path,"POST",dispatch,randomUUID())).status,409);
+ const delivery={...body,action:"deliver",observation:"recipient test evidence ABC-34"};
+ assert.equal((await call(a,path,"POST",delivery,randomUUID())).status,200);
+ assert.deepEqual(await balance(),[3,0,3]);
+ const record=await (await call(a,path)).json();assert.equal(record.allocations[0].state,"delivered");assert.equal(record.operationalStatus,"Delivered");
+ const status=await (await call(a,path+"/status")).json();assert.equal(status.operationalStatus,"Delivered");
+ const carrier=await (await call(a,"/api/operations/shipments/"+created[0].id)).json();assert.equal(carrier.carrierStatus,null);
+ const events=await db.query("SELECT action,observation FROM supply_chain.shipment_stock_events WHERE allocation_id=$1",[saved[0].allocationId]);
+ assert.equal(events.rowCount,3);assert(events.rows.some(e=>e.observation===delivery.observation));
+});
