@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 import { getAllowedOrigins, getJwtSecret } from "../config/security";
 
+import { nativeClient } from "./nativeAuthorization";
 import {accessIdentity, InactiveIdentity, signingKeys, tokenProfile} from "./managedOnesa";
 export {InactiveIdentity} from "./managedOnesa";
 
@@ -139,7 +140,13 @@ const assertion = z.object({
   onesa_product_roles: z.object({ logistics: z.enum(["user", "admin"]) }),
 });
 export function liveIdentity(config:Config,token:string) {
-  return config.managed ? Promise.resolve(accessIdentity(config.issuer,config.client,token,config.managed)) : legacyIdentity(config,token);
+  if (!config.managed) return legacyIdentity(config, token);
+  if (token.startsWith("{")) {
+    const grant = z.object({nativeClient: z.string(), token: z.string()}).parse(JSON.parse(token));
+    if (nativeClient(config.client) !== grant.nativeClient) throw new InactiveIdentity();
+    return Promise.resolve(accessIdentity(config.issuer, grant.nativeClient, grant.token, config.managed));
+  }
+  return Promise.resolve(accessIdentity(config.issuer, config.client, token, config.managed));
 }
 async function legacyIdentity(config: Config, token: string) {
   const result = assertion.safeParse(

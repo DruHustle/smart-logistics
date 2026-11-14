@@ -93,6 +93,7 @@ test("readiness requires the immutable-mail, Node-RED and identity migrations", 
       "007_immutable_mail.sql",
       "008_node_red_package_management.sql",
       "009_onesa_identity.sql",
+      "010_session_token_issuer.sql",
     ]) {
       const checksum = (
         await connection.query(

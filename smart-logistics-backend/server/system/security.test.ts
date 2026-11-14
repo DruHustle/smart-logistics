@@ -605,11 +605,12 @@ test("migration upgrade preserves legacy rows; concurrent runners serialize and 
     ).rows[0];
     assert.equal(row.workspace_id, null);
     assert.equal(row.created_at.toISOString(), "2026-10-26T09:00:00.000Z");
-    assert.equal(
-      (await pool.query("SELECT count(*)::int AS count FROM schema_migrations"))
-        .rows[0].count,
-      10,
+    const expectedMigrations = (await fs.readdir("migrations"))
+      .filter((file) => file.endsWith(".sql")).sort();
+    const appliedMigrations = await pool.query(
+      "SELECT name FROM schema_migrations WHERE checksum IS NOT NULL ORDER BY name",
     );
+    assert.deepEqual(appliedMigrations.rows.map((entry) => entry.name), expectedMigrations);
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "imsop-migration-"));
     try {
       for (const file of await fs.readdir("migrations"))

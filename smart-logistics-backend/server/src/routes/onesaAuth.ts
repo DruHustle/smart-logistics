@@ -15,7 +15,40 @@ import {
 import { verifyPassword } from "../services/passwords";
 import { rateLimit } from "../middleware/rateLimit";
 
+import { exchangeNativeCode, nativeClient, nativeRedirect, nativeRequest } from "../services/nativeAuthorization";
+import { accessIdentity, tokenProfile } from "../services/managedOnesa";
+
 const router = Router();
+router.get("/native/config", (_req, res) => {
+  const config = identityConfig();
+  const client = config?.managed && nativeClient(config.client);
+  if (!config?.managed || !client) return res.sendStatus(503);
+  return res.json({issuer: config.issuer, audience: config.managed.audience, client, redirect: nativeRedirect});
+});
+router.post("/native/exchange", rateLimit(15 * 60_000, 15), async (req, res) => {
+  const input = nativeRequest.safeParse(req.body);
+  if (!input.success) return res.sendStatus(400);
+  try {
+    const config = identityConfig();
+    const client = config?.managed && nativeClient(config.client);
+    if (!config?.managed || !client) return res.sendStatus(503);
+    const tokens = await exchangeNativeCode(config.issuer, client, input.data);
+    if (!tokens) return res.sendStatus(401);
+    const identity = accessIdentity(config.issuer, client, tokens.access_token, config.managed);
+    tokenProfile(config.issuer, client, tokens.id_token, input.data.nonce, identity.providerSubject, config.managed);
+    const {rows: [user]} = await connection.query(
+      `SELECT id,role,active_workspace_id AS "activeWorkspaceId",session_version AS "sessionVersion"
+       FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2 AND NOT disabled`,
+      [identity.iss, identity.sub],
+    );
+    if (!user || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
+      return res.sendStatus(403);
+    const grant = JSON.stringify({nativeClient: client, token: tokens.access_token});
+    return res.json({session: await createSession(user, sealToken(grant), config.issuer)});
+  } catch (error) {
+    return res.sendStatus(error instanceof InactiveIdentity ? 401 : 503);
+  }
+});
 const transactionCookie = "__Host-onesa_logistics_login";
 const returnCookie = "__Host-onesa_logistics_return";
 const cookieOptions = {

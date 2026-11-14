@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Smart Logistics",
+    "slug": "smart-logistics",
+    "scheme": "eu.onesa.logistics",
+    "version": "0.1.0",
+    "orientation": "default",
+    "ios": {
+      "bundleIdentifier": "eu.onesa.logistics",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "eu.onesa.logistics"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser"
+    ]
+  }
+}
