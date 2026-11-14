@@ -1,7 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch, Router as WouterRouter, Redirect } from "wouter";
-import { hostedWorkspace, portalAccount } from "./lib/portal-account";
+import {
+  hostedWorkspace,
+  portalRegistration,
+  portalSecurity,
+} from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider, PreferencesProvider } from "./contexts/ThemeContext";
@@ -48,7 +52,7 @@ function LegacyRedirect({ href }: { href: string }) {
   return <Redirect to={href + (q ? "?" + q : "")} replace />;
 }
 function PortalAccountRedirect({ register }: { register: boolean }) {
-  const url = portalAccount + (register ? "/register" : "/security");
+  const url = register ? portalRegistration : portalSecurity;
   useEffect(() => {
     window.location.replace(url);
   }, [url]);
