@@ -69,6 +69,72 @@ test("real purchasing, warehouse receiving, email opt-in and validated provider 
     path: "test-results/verification/remediation/purchasing-received.png",
     fullPage: true,
   });
+  await page.goto("/#/supply-chain/shipments");
+  await page
+    .getByRole("button", { name: "Create shipment", exact: true })
+    .click();
+  const shipmentRef = "OUTBOUND-" + Date.now();
+  await page
+    .getByLabel("Tracking reference", { exact: true })
+    .fill(shipmentRef);
+  await page.getByLabel("Origin", { exact: true }).fill("Verified test dock");
+  await page
+    .getByLabel("Destination", { exact: true })
+    .fill("Isolated receiving desk");
+  await page
+    .getByLabel("Tracking source", { exact: true })
+    .selectOption("isolated-carrier");
+  await page
+    .getByRole("button", { name: "Save shipment", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: shipmentRef, exact: true })
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Shipment stock and handover", exact: true })
+    .click();
+  const movement = page.getByRole("region", {
+    name: "Shipment stock movements",
+    exact: true,
+  });
+  await movement
+    .getByRole("button", {
+      name: /Verification part · Verification warehouse · 2 available/,
+    })
+    .click();
+  await movement.getByLabel("Movement quantity", { exact: true }).fill("1");
+  const evidence = movement.getByLabel(
+    "Observed handover or delivery proof reference",
+    { exact: true }
+  );
+  await evidence.fill("Controlled warehouse reservation");
+  await movement
+    .getByRole("button", { name: "Confirm reserve", exact: true })
+    .click();
+  await movement
+    .getByRole("button", { name: "dispatch 1 units", exact: true })
+    .click();
+  await evidence.fill("Observed handover at controlled dock");
+  await movement
+    .getByRole("button", { name: "Confirm dispatch", exact: true })
+    .click();
+  await movement
+    .getByRole("button", { name: "deliver 1 units", exact: true })
+    .click();
+  await evidence.fill("Isolated recipient proof REF-318");
+  await movement
+    .getByRole("button", { name: "Confirm deliver", exact: true })
+    .click();
+  await expect(
+    movement.getByText(/Isolated recipient proof REF-318/)
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Shipment stock and handover", exact: true })
+    .click();
+  await expect(
+    movement.getByText(/Isolated recipient proof REF-318/)
+  ).toBeVisible();
   await page.goto("/#/settings");
   await expect(
     page.getByRole("switch", { name: "Review activity emails", exact: true })
