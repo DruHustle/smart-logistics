@@ -197,7 +197,7 @@ and [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/).
 
 ### Onesa administrator sign-in
 
-Apply migration `009_onesa_identity.sql` before deploying the Node API. Register
+Apply migration `010_session_token_issuer.sql` before deploying the Node API. Register
 the `logistics` client on the Portal with application URL
 `https://logistics.onesa.eu` and exact callback
 `https://logistics.onesa.eu/api/auth/onesa/callback`. Add the callback to
