@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ShipmentStock } from "@/components/ShipmentStock";
 import { Link } from "wouter";
 import { ReadError, readSource, useData } from "@/contexts/DataContext";
 import { demoShipments, demoOrders, demoEvents } from "@/lib/demo-data";
@@ -167,6 +168,9 @@ function Detail({ kind, id, tracking = false }: Props) {
       ) : (
         record && (
           <>
+            {kind === "shipments" && mode === "live" && (
+              <ShipmentStock shipment={id} />
+            )}
             {tracking ? (
               <Panel
                 title="Tracking events"

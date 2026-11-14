@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ActivityIndicator, Button, Text, View } from "react-native";
+import { ShipmentStock } from "./ShipmentStock";
 import { request } from "./api";
 
 type Card = { key: string; title: string; note: string };
@@ -72,6 +73,7 @@ export function OperatorRecords({
           ) : selected ? (
             <>
               <Button title="Back to list" onPress={() => setSelected(null)} />
+              <ShipmentStock shipment={selected} session={session} />
               {history.map((v, i) => (
                 <Text key={i}>{v}</Text>
               ))}

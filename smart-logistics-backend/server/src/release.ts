@@ -11,7 +11,8 @@ export const release = {
     "workspace-edge-observations-v1",
     "immutable-mail-v1",
     "node-red-package-management-v1",
+    "shipment-stock-v1",
   ],
   nodeSchema: "010_session_token_issuer.sql",
-  supplyChainSchema: "202610270002_PurchaseReceiving",
+  supplyChainSchema: "202611140001_ShipmentStock",
 };
