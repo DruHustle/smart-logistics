@@ -8,7 +8,6 @@ import {
   exchangeCode,
   identityConfig,
   InactiveIdentity,
-  liveIdentity,
   randomValue,
   sealToken,
   safeReturnPath,
@@ -118,8 +117,7 @@ router.get("/callback", async (req, res) => {
     let returnTo = "#/";
     try { returnTo = safeReturnPath(decodeURIComponent(encodedReturn ?? "")); } catch {}
     res.clearCookie(returnCookie, cookieOptions);
-    const token = await exchangeCode(config, query.data.code, txn.verifier);
-    const identity = await liveIdentity(config, token);
+    const {token, identity} = await exchangeCode(config, query.data.code, txn.verifier);
     const email = identity.email.toLowerCase();
     if (txn.link_user_id !== null) {
       const updated = await connection.query(
@@ -141,7 +139,7 @@ router.get("/callback", async (req, res) => {
       await connection.query(
         `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role) VALUES($1,$2,$3,$4,'!onesa-managed',$5)
          ON CONFLICT DO NOTHING`,
-        [...values, email, identity.name, identity.onesa_product_roles.logistics],
+        [...values, email, identity.name, config.managed ? 'user' : identity.onesa_product_roles.logistics],
       );
       ({
         rows: [user],
@@ -151,7 +149,7 @@ router.get("/callback", async (req, res) => {
     if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied");
     res.cookie(
       "imsop_access",
-      await createSession(user, sealToken(token)),
+      await createSession(user, sealToken(token), config.issuer),
       authCookieOptions(),
     );
     return res.redirect(303, config.origin + "/" + returnTo);

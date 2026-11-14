@@ -58,3 +58,11 @@ Do not mark these as passed from source tests, an image push, a landing page, a 
 ## Scope of source consolidation
 
 These changes migrate workflow definitions and release checks, not account secrets or deployed infrastructure. Existing production continues through its retained configuration until the above operating gates are completed. Pending gate evidence is a release blocker, not permission to claim 100% production validation.
+
+### Managed Identity pilot
+
+Apply Node API migration 010 before the candidate API starts. Register the Logistics web application's exact confidential callback in Identity. The existing client secret and redirect settings remain server-side. Select `ONESA_IDENTITY_MODE=managed`, `ONESA_IDENTITY_ISSUER=https://auth.onesa.eu/`, and the registered `ONESA_IDENTITY_AUDIENCE`. Set `ONESA_IDENTITY_JWKS` to the trusted current/next public RS256 key set from that issuer's HTTPS discovery document, and `ONESA_IDENTITY_JWKS_EXPIRES_AT` to its finite distribution deadline in Unix seconds. Replace snapshots ahead of rotation and expiry, and distribute emergency key removal before reopening the API.
+
+New sign-in binds an ID token, verified email, code, PKCE verifier, nonce and stable managed subject. An existing Onesa account lookup uses the historical Portal issuer namespace with the verified Onesa user UUID. The original local password proof remains mandatory for linking a pre-federation account. The product enforces local workspace and object permissions. A scoped platform role cannot elevate a Logistics engineer into a local administrator. An existing Logistics administrator also needs a valid product-admin role and a recent provider MFA timestamp.
+
+Protected requests verify the audience, product and role against the locally available key set. An access token lasts up to 300 seconds. Human sign-in requires the provider; valid existing requests do not contact Identity or Documents. Returning to Portal mode preserves records and post-cutover local permissions. Retain migration 010, reconcile authority changes and require fresh sign-in to the selected authority.

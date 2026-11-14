@@ -8,12 +8,16 @@ import {
 import { z } from "zod";
 import { getAllowedOrigins, getJwtSecret } from "../config/security";
 
+import {accessIdentity, InactiveIdentity, signingKeys, tokenProfile} from "./managedOnesa";
+export {InactiveIdentity} from "./managedOnesa";
+
+type Config = {issuer:string;client:string;secret:string;origin:string;redirect:string;managed?:ReturnType<typeof signingKeys>};
 const callbackPath = "/api/auth/onesa/callback";
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
 
-export function identityConfig() {
+export function identityConfig():Config|null {
   if (process.env.ONESA_IDENTITY_ENABLED !== "true") return null;
   const issuer = process.env.ONESA_IDENTITY_ISSUER || "";
   const client = process.env.ONESA_IDENTITY_CLIENT_ID || "";
@@ -21,9 +25,12 @@ export function identityConfig() {
   const redirect = process.env.ONESA_IDENTITY_REDIRECT_URI || "";
   const origin = new URL(redirect).origin;
   const authority = new URL(issuer);
+  const mode = process.env.ONESA_IDENTITY_MODE || "portal";
+  if (mode !== "portal" && mode !== "managed") throw Error("Invalid Onesa Identity mode");
+  const managed = mode==="managed" ? signingKeys() : undefined;
   if (
     authority.protocol !== "https:" ||
-    issuer !== authority.origin + "/api/v1/identity" ||
+    (managed ? issuer !== "https://auth.onesa.eu/" : issuer !== authority.origin + "/api/v1/identity") ||
     !getAllowedOrigins().includes(origin) ||
     !redirect.startsWith("https://") ||
     redirect !== origin + callbackPath ||
@@ -32,10 +39,10 @@ export function identityConfig() {
     secret.length > 256
   )
     throw Error("Invalid Onesa configuration");
-  return { issuer, client, secret, redirect, origin };
+  return { issuer, client, secret, redirect, origin, managed };
 }
-type Config = NonNullable<ReturnType<typeof identityConfig>>;
-export class InactiveIdentity extends Error {}
+// The PKCE secret is unique per login; a separate derivation binds the ID token to that transaction.
+const transactionNonce = (verifier:string) => digest("logistics-oidc-nonce:" + verifier);
 
 export function authorizationUrl(
   config: Config,
@@ -44,22 +51,23 @@ export function authorizationUrl(
 ) {
   const params = new URLSearchParams({
     response_type: "code",
-    scope: "openid email profile onesa",
+    scope: config.managed ? "openid email profile" : "openid email profile onesa",
+    ...(config.managed && {audience:config.managed.audience}),
     client_id: config.client,
     redirect_uri: config.redirect,
     state,
-    nonce: randomValue(),
+    nonce: transactionNonce(verifier),
     code_challenge: digest(verifier),
     code_challenge_method: "S256",
   });
-  return config.issuer + "/auth?" + params;
+  return config.issuer + (config.managed ? "authorize?" : "/auth?") + params;
 }
 
 const encoded = (value: string) =>
   new URLSearchParams({ x: value }).toString().slice(2);
 async function issuerPost(
   config: Config,
-  path: "/token" | "/session",
+  path: "/token" | "/session" | "oauth/token",
   body: URLSearchParams | string,
 ) {
   const credentials = Buffer.from(
@@ -89,15 +97,16 @@ export async function exchangeCode(
   code: string,
   verifier: string,
 ) {
-  return z
+  const response = z
     .object({
-      access_token: z.string().min(20).max(2048),
+      access_token: z.string().min(20).max(16384),
+      id_token: z.string().max(16384).optional(),
       token_type: z.string().regex(/^Bearer$/i),
     })
     .parse(
       await issuerPost(
         config,
-        "/token",
+        config.managed ? "oauth/token" : "/token",
         new URLSearchParams({
           grant_type: "authorization_code",
           code,
@@ -105,7 +114,14 @@ export async function exchangeCode(
           code_verifier: verifier,
         }),
       ),
-    ).access_token;
+    );
+  if (config.managed) {
+    if (!response.id_token) throw new InactiveIdentity();
+    const claims = accessIdentity(config.issuer,config.client,response.access_token,config.managed);
+    const profile = tokenProfile(config.issuer,config.client,response.id_token,transactionNonce(verifier),claims.providerSubject,config.managed);
+    return {token:response.access_token, identity:{...claims,...profile}};
+  }
+  return {token:response.access_token, identity:await legacyIdentity(config,response.access_token)};
 }
 const assertion = z.object({
   active: z.literal(true),
@@ -122,7 +138,10 @@ const assertion = z.object({
   onesa_applications: z.array(z.string()),
   onesa_product_roles: z.object({ logistics: z.enum(["user", "admin"]) }),
 });
-export async function liveIdentity(config: Config, token: string) {
+export function liveIdentity(config:Config,token:string) {
+  return config.managed ? Promise.resolve(accessIdentity(config.issuer,config.client,token,config.managed)) : legacyIdentity(config,token);
+}
+async function legacyIdentity(config: Config, token: string) {
   const result = assertion.safeParse(
     await issuerPost(config, "/session", JSON.stringify({ token })),
   );
