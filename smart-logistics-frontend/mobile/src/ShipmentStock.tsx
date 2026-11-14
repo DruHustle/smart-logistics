@@ -16,6 +16,7 @@ type Allocation = {
   state: string;
 };
 type Snapshot = {
+  operationalStatus: string;
   stock: Stock[];
   allocations: Allocation[];
   hasMore: boolean;
@@ -39,6 +40,7 @@ export function ShipmentStock({
   shipment: string;
   session: string;
 }) {
+  const [operationalStatus, setOperationalStatus] = useState("Loading");
   const [open, setOpen] = useState(false),
     [page, setPage] = useState(0),
     [data, setData] = useState<Snapshot | null>(null),
@@ -53,12 +55,29 @@ export function ShipmentStock({
     intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const path = "/supply-chain/api/v1/shipment-stock/" + shipment;
   useEffect(() => {
+    let current = true;
+    setOperationalStatus("Loading");
+    request(session, path + "/status")
+      .then((result: { operationalStatus: string }) => {
+        if (current) setOperationalStatus(result.operationalStatus);
+      })
+      .catch(() => {
+        if (current) setOperationalStatus("Unavailable");
+      });
+    return () => {
+      current = false;
+    };
+  }, [path, refresh, session]);
+  useEffect(() => {
     if (!open) return;
     let current = true;
     setData(null);
     request(session, path + "?offset=" + page * 50)
       .then((result: Snapshot) => {
-        if (current) setData(result);
+        if (current) {
+          setData(result);
+          setOperationalStatus(result.operationalStatus);
+        }
       })
       .catch((error: Error) => {
         if (current) setMessage(error.message);
@@ -121,6 +140,9 @@ export function ShipmentStock({
 
   return (
     <View style={{ gap: 8 }}>
+      <Text accessibilityLiveRegion="polite">
+        Operational fulfillment: {operationalStatus}
+      </Text>
       <Button
         title={open ? "Close shipment stock" : "Shipment stock and handover"}
         onPress={() => setOpen(!open)}
