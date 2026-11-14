@@ -75,3 +75,46 @@ for (const [route, purpose] of [
     }
   });
 }
+
+test("hosted login offers Portal account access during an issuer outage", async ({
+  page,
+  baseURL,
+}) => {
+  const hosted = "https://logistics.example.invalid";
+  await page.route(hosted + "/**", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/api/")) {
+      return route.fulfill({
+        status: 503,
+        json: { error: "Service unavailable" },
+      });
+    }
+    const asset = await page.request.get(
+      new URL(url.pathname + url.search, baseURL).href
+    );
+    await route.fulfill({ response: asset });
+  });
+  await page.route("https://portal.onesa.eu/**", route =>
+    route.fulfill({ contentType: "text/html", body: "<title>Portal</title>" })
+  );
+
+  await page.goto(hosted + "/#/login");
+  const portal = page
+    .getByRole("status")
+    .getByRole("link", { name: "Company Portal" });
+  await expect(portal).toHaveAttribute("href", "https://portal.onesa.eu/admin");
+  await portal.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("https://portal.onesa.eu/admin");
+
+  await page.goto(hosted + "/#/login");
+  await page.getByRole("button", { name: "Sign Up", exact: true }).click();
+  await expect(page).toHaveURL("https://portal.onesa.eu/admin?entry=register");
+  for (const [route, destination] of [
+    ["/register", "/admin?entry=register"],
+    ["/forgot-password", "/account/security"],
+  ]) {
+    await page.goto(hosted + "/#" + route);
+    await expect(page).toHaveURL("https://portal.onesa.eu" + destination);
+  }
+});

@@ -1,7 +1,12 @@
 import { DEMO_ACCOUNTS, type DemoAccount } from "../../../shared/demo-accounts";
 import { useHashQuery } from "@/lib/hash-location";
 import { safeSessionStorage } from "@/lib/storage";
-import { hostedWorkspace, portalAccount } from "@/lib/portal-account";
+import {
+  hostedWorkspace,
+  portalRegistration,
+  portalSecurity,
+  portalSignIn,
+} from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -185,7 +190,11 @@ export default function Login() {
             signInMode === "live" && (
               <p role="status">
                 The shared sign-in service is not connected. You can retry or
-                manage your account in Company Portal.
+                manage your account in{" "}
+                <a className="text-primary underline" href={portalSignIn}>
+                  Company Portal
+                </a>
+                .
               </p>
             )}
           {(!hostedWorkspace || signInMode === "demo" || linkRequested) && (
@@ -220,7 +229,7 @@ export default function Login() {
                     type="button"
                     onClick={() =>
                       hostedWorkspace
-                        ? window.location.assign(portalAccount + "/security")
+                        ? window.location.assign(portalSecurity)
                         : navigate("/forgot-password")
                     }
                     className="text-xs text-primary hover:underline"
@@ -294,7 +303,7 @@ export default function Login() {
             <button
               onClick={() =>
                 hostedWorkspace
-                  ? window.location.assign(portalAccount + "/register")
+                  ? window.location.assign(portalRegistration)
                   : navigate("/register")
               }
               className="text-primary hover:underline font-semibold"

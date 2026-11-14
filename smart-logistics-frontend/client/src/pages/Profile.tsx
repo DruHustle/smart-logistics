@@ -1,4 +1,4 @@
-import { hostedWorkspace, portalAccount } from "@/lib/portal-account";
+import { hostedWorkspace, portalSecurity } from "@/lib/portal-account";
 import {
   Card,
   CardContent,
@@ -268,7 +268,7 @@ export default function Profile() {
                 </p>
               </div>
               {hostedWorkspace && !demoIdentity ? (
-                <a className="underline" href={portalAccount + "/security"}>
+                <a className="underline" href={portalSecurity}>
                   Manage Onesa account security
                 </a>
               ) : (
