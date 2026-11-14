@@ -58,7 +58,7 @@ export const authenticate = async (
   }
   try {
     const result = await connection.query(
-      `SELECT u.id,u.email,u.role,u.onesa_issuer,u.onesa_subject,s.onesa_token,s.id AS session_id,s.workspace_id,w.dotnet_organization_id
+      `SELECT u.id,u.email,u.role,u.onesa_issuer,u.onesa_subject,s.onesa_token,s.onesa_token_issuer,s.id AS session_id,s.workspace_id,w.dotnet_organization_id
    FROM auth_sessions s JOIN users u ON u.id=s.user_id LEFT JOIN workspaces w ON w.id=s.workspace_id
    WHERE s.id=$1 AND u.id=$2 AND s.revoked_at IS NULL AND s.expires_at>now() AND NOT u.disabled
    AND s.version=u.session_version AND s.role=u.role AND s.workspace_id IS NOT DISTINCT FROM u.active_workspace_id
@@ -76,12 +76,13 @@ export const authenticate = async (
     if (row.onesa_token !== null && row.onesa_token !== undefined) {
       const config = identityConfig();
       if (!config) throw new InactiveIdentity();
+      if (config.issuer !== (row.onesa_token_issuer ?? row.onesa_issuer)) throw new InactiveIdentity();
       const identity = await liveIdentity(config, openToken(row.onesa_token));
       if (identity.iss !== row.onesa_issuer || identity.sub !== row.onesa_subject ||
           (row.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
         throw new InactiveIdentity();
-      // Central administrators are checked live; ordinary accounts retain their local role and membership.
-      if (identity.onesa_product_roles.logistics === "admin") row.role = "admin";
+      // Legacy Portal supplies an effective staff role. A managed grant must also match local authorization.
+      if (!config.managed && identity.onesa_product_roles.logistics === "admin") row.role = "admin";
     }
     req.user = {
       id: row.id,
