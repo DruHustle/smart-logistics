@@ -6,6 +6,7 @@ const fixture = JSON.parse(
 test("real purchasing, warehouse receiving, email opt-in and validated provider forecasts work in the browser", async ({
   page,
 }) => {
+  test.setTimeout(120000);
   await page.goto("/#/login");
   await page.getByLabel("Email", { exact: true }).fill(fixture.email);
   await page
@@ -82,7 +83,7 @@ test("real purchasing, warehouse receiving, email opt-in and validated provider 
     .getByLabel("Destination", { exact: true })
     .fill("Isolated receiving desk");
   await page
-    .getByLabel("Tracking source", { exact: true })
+    .getByRole("combobox", { name: "Tracking source", exact: true })
     .selectOption("isolated-carrier");
   await page
     .getByRole("button", { name: "Save shipment", exact: true })

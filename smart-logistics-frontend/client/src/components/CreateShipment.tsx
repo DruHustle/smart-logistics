@@ -112,6 +112,7 @@ export function CreateShipment({
           <label>
             Tracking source
             <select
+              aria-label="Tracking source"
               value={provider}
               onChange={e => setProvider(e.target.value)}
             >
