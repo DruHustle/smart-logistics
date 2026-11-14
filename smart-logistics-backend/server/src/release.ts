@@ -12,6 +12,7 @@ export const release = {
     "immutable-mail-v1",
     "node-red-package-management-v1",
     "shipment-stock-v1",
+    "operator-shipment-creation-v1",
   ],
   nodeSchema: "010_session_token_issuer.sql",
   supplyChainSchema: "202611140001_ShipmentStock",

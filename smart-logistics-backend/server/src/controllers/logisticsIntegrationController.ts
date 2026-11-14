@@ -60,6 +60,8 @@ export function projectEvents(events: any[]) {
 export async function ingestLogisticsEvent(req: Request, res: Response) {
   const provider = req.logisticsProvider!,
     event = req.body;
+  if(provider==="workspace-operator"||event.eventId.startsWith("operator-create:"))
+    return res.status(400).json({error:"This event identity is reserved for operator entries"});
   const tx = await connection.connect();
   try {
     await tx.query("BEGIN");

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ActivityIndicator, Button, Text, View } from "react-native";
+import { CreateShipment } from "./CreateShipment";
 import { ShipmentStock } from "./ShipmentStock";
 import { request } from "./api";
 
@@ -80,6 +81,13 @@ export function OperatorRecords({
             </>
           ) : (
             <>
+              <CreateShipment
+                session={session}
+                onCreated={id => {
+                  setSelected(id);
+                  setRefresh(n => n + 1);
+                }}
+              />
               {rows.map(r => (
                 <View key={r.key}>
                   <Button title={r.title} onPress={() => setSelected(r.key)} />
@@ -140,11 +148,12 @@ async function readDetail(session: string, key: string) {
       eventType: string;
       occurredAt: string;
       provider: string;
+      source?: string;
       position?: { lat: number; lng: number };
     }) =>
       [
         e.occurredAt,
-        e.provider,
+        [e.provider, e.source].filter(Boolean).join(" / "),
         e.eventType,
         e.position && e.position.lat + ", " + e.position.lng,
       ]

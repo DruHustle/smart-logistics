@@ -1,3 +1,4 @@
+import { CreateShipment } from "@/components/CreateShipment";
 import { RecordPreview } from "@/components/Board";
 import { lazy, Suspense, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -33,7 +34,7 @@ const ShipmentMap = lazy(() =>
   import("@/components/Map").then(m => ({ default: m.MapView }))
 );
 export default function Operations() {
-  const { shipments } = useData();
+  const { shipments, mode } = useData();
   const [path, navigate] = useLocation();
   const params = useHashQuery();
   const [view, setView] = useState<"list" | "map">("list");
@@ -76,6 +77,11 @@ export default function Operations() {
         description="Track progress and resolve exceptions"
         actions={
           <div className="flex flex-wrap gap-2">
+            {mode === "live" && (
+              <CreateShipment
+                onCreated={id => navigate("/supply-chain/shipments/" + id)}
+              />
+            )}
             <Dialog>
               <DialogTrigger asChild>
                 <Button>
@@ -86,11 +92,8 @@ export default function Operations() {
               <DialogContent>
                 <DialogTitle>Shipment integration required</DialogTitle>
                 <DialogDescription>
-                  Production shipment creation is not supported by this
-                  application. Authorized logistics webhooks populate the
-                  shipment store. Ask your integration administrator to
-                  configure the existing logistics event contract before
-                  onboarding shipments.
+                  An integration administrator can connect a carrier that sends
+                  signed tracking events to this workspace.
                 </DialogDescription>
               </DialogContent>
             </Dialog>

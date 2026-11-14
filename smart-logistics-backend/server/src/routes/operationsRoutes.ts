@@ -1,3 +1,4 @@
+import {createOperatorShipment,operatorShipmentInput,shipmentProviders} from "../controllers/operatorShipment";
 import { Router } from "express";
 import { sapMetadata } from "../controllers/integrations";
 import {
@@ -36,6 +37,8 @@ import {
   forecastInput,
 } from "../controllers/forecasts";
 const router = Router();
+router.get("/shipment-providers",authenticate,requireWorkspace,authorize(["admin","engineer"]),shipmentProviders);
+router.post("/shipments",authenticate,requireWorkspace,authorize(["admin","engineer"]),validateBody(operatorShipmentInput),createOperatorShipment);
 router.get("/integrations/sap/metadata", authenticate, requireWorkspace, authorize(["admin", "engineer"]), sapMetadata);
 router.get(
   "/forecasts",

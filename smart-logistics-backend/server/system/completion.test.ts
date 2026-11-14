@@ -618,10 +618,16 @@ test("purchase pages and catalogs expose records beyond their first bounded page
 });
 
 test("outbound stock maintains the canonical ledger under parallel grants, retries and delivery confirmation", async()=>{
- const ref=await db.query("INSERT INTO shipments(workspace_id,tracking_number,origin,destination,status) VALUES($1,$2,'Dock A','Site B','pending') RETURNING id",[a.workspace,randomUUID()]);
+ const draft={trackingNumber:randomUUID(),origin:"Dock A",destination:"Site B"},createPath="/api/operations/shipments",createKey=randomUUID();
+ assert.equal((await call(user,createPath,"POST",draft,randomUUID())).status,403);
+ assert.equal((await call(a,createPath,"POST",{...draft,provider:"another-workspace-carrier"},randomUUID())).status,404);
+ const attempts=await Promise.all([call(a,createPath,"POST",draft,createKey),call(a,createPath,"POST",draft,createKey)]);
+ assert.deepEqual(attempts.map(r=>r.status).sort(),[200,201]);const created=await Promise.all(attempts.map(r=>r.json()));assert.equal(created[0].id,created[1].id);
+ assert.equal((await call(a,createPath,"POST",{...draft,destination:"Different"},createKey)).status,409);
+ assert.equal((await call(a,createPath,"POST",draft,randomUUID())).status,409);
  const stock=randomUUID();
  await db.query("INSERT INTO supply_chain.inventories(id,organization_id,warehouse_id,product_id,quantity_on_hand,quantity_reserved) VALUES($1,$2,$3,$4,8,0)",[stock,a.org,a.warehouse,a.product]);
- const path="/supply-chain/api/v1/shipment-stock/"+ref.rows[0].id,body={action:"reserve",inventoryId:stock,quantity:5,observation:"isolated dock observation"},key=randomUUID();
+ const path="/supply-chain/api/v1/shipment-stock/"+created[0].id,body={action:"reserve",inventoryId:stock,quantity:5,observation:"isolated dock observation"},key=randomUUID();
  const balance=async()=>{const r=await db.query("SELECT quantity_on_hand,quantity_reserved,quantity_available FROM supply_chain.inventories WHERE id=$1",[stock]);return Object.values(r.rows[0]);};
  assert.equal((await call(user,path,"POST",body,randomUUID())).status,403);
  assert.equal((await call(b,path,"POST",body,randomUUID())).status,404);
