@@ -1,0 +1,96 @@
+name: Installed operator clients
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/native-operator-20261114]
+    paths: ['smart-logistics-frontend/mobile/**', '.github/workflows/operator-native.yml']
+  pull_request:
+    paths: ['smart-logistics-frontend/mobile/**', '.github/workflows/operator-native.yml']
+permissions:
+  contents: read
+concurrency:
+  group: operator-mobile-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+env:
+  CI: '1'
+  EXPO_NO_TELEMETRY: '1'
+defaults:
+  run:
+    working-directory: smart-logistics-frontend/mobile
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.22.1
+      - run: npm ci && npm run typecheck && npm test
+      - name: Generate Android and package the standalone qualification app
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          npx --no-install expo prebuild --platform android --no-install
+          cd android
+          ./gradlew --no-daemon assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64
+          apk=app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          unzip -l "$apk" | grep 'assets/index.android.bundle'
+          "$ANDROID_HOME/build-tools/$(ls -v "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify "$apk"
+          cp "$apk" "$RUNNER_TEMP/SmartLogistics-qualification.apk"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: SmartLogistics-qualification-apk
+          path: ${{ runner.temp }}/SmartLogistics-qualification.apk
+          retention-days: 3
+          compression-level: 0
+      - name: Grant the hosted emulator access to KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and open the Android release package
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install "$RUNNER_TEMP/SmartLogistics-qualification.apk"
+            adb shell am start -W -n eu.onesa.logistics/.MainActivity
+            sleep 5
+            adb shell pidof eu.onesa.logistics
+            adb shell uiautomator dump /sdcard/operator-window.xml
+            adb shell cat /sdcard/operator-window.xml | grep -i 'Sign in with Onesa'
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.22.1
+      - run: npm ci && npx --no-install expo prebuild --platform ios --no-install && pod install --project-directory=ios
+      - name: Install and launch the Release app on an iPhone simulator
+        run: |
+          phone=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name|startswith("iPhone"))][0].udid // empty')
+          test -n "$phone"
+          xcrun simctl boot "$phone" || xcrun simctl bootstatus "$phone" -b
+          xcrun simctl bootstatus "$phone" -b
+          xcodebuild -workspace ios/SmartLogistics.xcworkspace -scheme SmartLogistics -configuration Release -destination "id=$phone" -derivedDataPath "$RUNNER_TEMP/operator-build" build
+          app="$RUNNER_TEMP/operator-build/Build/Products/Release-iphonesimulator/SmartLogistics.app"
+          test -s "$app/main.jsbundle"
+          xcrun simctl install "$phone" "$app"
+          xcrun simctl launch "$phone" eu.onesa.logistics
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/SmartLogistics-simulator.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: SmartLogistics-iPhone-simulator
+          path: ${{ runner.temp }}/SmartLogistics-simulator.zip
+          retention-days: 3
+          compression-level: 0

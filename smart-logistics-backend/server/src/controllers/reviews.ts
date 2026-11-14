@@ -37,6 +37,16 @@ export async function reviewFeed(req: AuthRequest, res: Response) {
     source: "node.review_cases",
   });
 }
+export async function reviewDetail(req: AuthRequest, res: Response) {
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({error: "Invalid case ID"});
+  const {rows: [row]} = await connection.query(
+    `SELECT c.id,c.shipment_id AS "shipmentId",s.tracking_number AS "trackingNumber",c.state,c.version
+     FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id
+     WHERE c.id=$1 AND c.workspace_id=$2`, [id, req.user!.workspaceId],
+  );
+  return row ? res.json(row) : res.status(404).json({error: "Review case not found"});
+}
 export async function reviewHistory(req: AuthRequest, res: Response) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid case ID" });

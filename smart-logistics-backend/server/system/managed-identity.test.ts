@@ -34,9 +34,16 @@ test("a linked Logistics operator can open an existing shipment with Docs absent
     if(String(input).startsWith(base+"/"))return original(input,init);
     if(String(input)!==issuer+"oauth/token")throw Error("Unexpected service dependency");
     if(!online)return Response.json({}, {status:503});
+    const publicClient = (init?.body as URLSearchParams)?.get("client_id");
+    const selected = publicClient || client;
+    if (publicClient) {
+      assert.equal(publicClient,process.env.ONESA_IDENTITY_NATIVE_CLIENT_ID);
+      assert.equal((init?.body as URLSearchParams).get("redirect_uri"),"eu.onesa.logistics://signin/callback");
+      assert.equal(new Headers(init?.headers).has("Authorization"),false);
+    }
     return Response.json({token_type:"Bearer",access_token:sign({"https://onesa.eu/claims/user_id":stable,"https://onesa.eu/claims/products":products,
-      "https://onesa.eu/claims/roles":[role],"https://onesa.eu/claims/mfa_time":Math.floor(Date.now()/1000),azp:client},aud,expiry),
-      id_token:sign({nonce:nonceOverride||nonce,email:"new-address@example.test",name:"New name",email_verified:true},client,300)});
+      "https://onesa.eu/claims/roles":[role],"https://onesa.eu/claims/mfa_time":Math.floor(Date.now()/1000),azp:selected},aud,expiry),
+      id_token:sign({nonce:nonceOverride||nonce,email:"new-address@example.test",name:"New name",email_verified:true},selected,300)});
   };
   const get=(path:string,cookie="")=>fetch(base+path,{redirect:"manual",headers:{Origin:origin,Cookie:cookie}});
   const destination="#/supply-chain/shipments/"+shipments[0].id+"/tracking";
@@ -53,6 +60,21 @@ test("a linked Logistics operator can open an existing shipment with Docs absent
   const shipment="/api/operations/shipments/";
   assert.equal((await get(shipment+shipments[0].id,session)).status,200);
   assert.equal((await get(shipment+shipments[1].id,session)).status,404);
+  process.env.ONESA_IDENTITY_NATIVE_CLIENT_ID="logistics-public-mobile";
+  nonce="a".repeat(48);
+  const nativeExchange=()=>fetch(base+"/api/auth/onesa/native/exchange",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:"fixture",verifier:"v".repeat(64),nonce})});
+  const native=await nativeExchange();assert.equal(native.status,200);
+  const auth={Authorization:"Bearer "+(await native.json()).session};
+  assert.equal((await fetch(base+shipment+shipments[0].id,{headers:auth})).status,200);
+  assert.equal((await fetch(base+shipment+shipments[1].id,{headers:auth})).status,404);
+  const review=(await connection.query("INSERT INTO review_cases(shipment_id,workspace_id) VALUES($1,$2) ON CONFLICT (workspace_id,shipment_id) DO UPDATE SET state='open' RETURNING id,version",[shipments[0].id,workspace])).rows[0];
+  const path=base+"/api/operations/reviews/"+review.id;
+  assert.equal((await fetch(path,{headers:auth})).status,200);
+  const action=await fetch(path+"/actions",{method:"POST",headers:{...auth,"Content-Type":"application/json"},body:JSON.stringify({action:"resolve",version:review.version,note:"Delivery confirmed by fixture receiver"})});
+  assert.equal(action.status,200);
+  assert.equal((await (await fetch(path,{headers:auth})).json()).state,"resolved");
+  assert.ok((await (await fetch(path+"/actions",{headers:auth})).json()).items.some((a:{action:string})=>a.action==="resolve"));
+  nonceOverride="invalid";assert.equal((await nativeExchange()).status,401);nonceOverride="";
   role="admin";const staff=await signIn();assert.equal((await (await get("/api/auth/me",staff)).json()).user.role,"engineer");
   role="user";products=[];assert.match((await callback()).headers.get("location")!,/onesa=denied$/);
   products=["logistics"];aud="https://api.other.example";assert.match((await callback()).headers.get("location")!,/onesa=denied$/);aud=audience;
