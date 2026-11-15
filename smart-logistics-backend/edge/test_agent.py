@@ -1,6 +1,8 @@
 import json
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -65,6 +67,47 @@ class EdgeTests(unittest.TestCase):
                          "https://api.example.test/api/edge/truck-gateway-1/events")
         self.assertEqual(self.outbound[0].get_method(), "POST")
         self.assertIsNotNone(self.outbound[0].get_header("X-edge-signature"))
+
+    def test_redirect_never_acknowledges_or_drops_queued_event(self):
+        redirected = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(302)
+                self.send_header("Location", "/redirect-target")
+                self.end_headers()
+
+            def do_GET(self):
+                redirected.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            endpoint = f"http://127.0.0.1:{server.server_port}"
+            agent = EdgeAgent(
+                self.state, "truck-gateway-1", {"truck-42"},
+                "a" * 40, "b" * 40, endpoint, allow_loopback_http=True
+            )
+            event = sample()
+            agent.ingest(json.dumps(event).encode(), "a" * 40)
+
+            self.assertFalse(agent.deliver_once())
+            row = self.state.conn.execute(
+                "SELECT attempts, quarantined FROM outbox WHERE event_id=?",
+                (event["eventId"],)
+            ).fetchone()
+            self.assertEqual(row, (1, 0))
+            self.assertEqual(redirected, [])
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
 
     def test_invalid_gps_and_impossible_coordinates_rejected(self):
         event = sample()
