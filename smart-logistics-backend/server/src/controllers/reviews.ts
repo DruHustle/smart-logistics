@@ -51,7 +51,7 @@ export async function reviewHistory(req: AuthRequest, res: Response) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid case ID" });
   const found = await connection.query(
-    "SELECT id FROM review_cases WHERE id=$1 AND workspace_id=$2",
+    "SELECT c.id FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id WHERE c.id=$1 AND c.workspace_id=$2",
     [id, req.user!.workspaceId],
   );
   if (!found.rowCount)
@@ -71,7 +71,7 @@ export async function actOnReview(req: AuthRequest, res: Response) {
     await tx.query("BEGIN");
     const row = (
       await tx.query(
-        "SELECT * FROM review_cases WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+        "SELECT c.* FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id WHERE c.id=$1 AND c.workspace_id=$2 FOR UPDATE OF c",
         [id, req.user!.workspaceId],
       )
     ).rows[0];

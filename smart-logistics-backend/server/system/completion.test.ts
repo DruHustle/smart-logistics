@@ -695,6 +695,32 @@ test("mismatched review ownership cannot surface shipment identities in feeds or
   assert(!JSON.stringify(feed).includes(tracking));
   assert.equal((await call(a, "/api/operations/reviews/" + malformedCase)).status, 404);
 
+  // A legacy case with a mismatched shipment workspace must not expose its
+  // action history or permit state changes, assignment or new notifications.
+  const history = await call(a, "/api/operations/reviews/" + malformedCase + "/actions");
+  assert.equal(history.status, 404);
+  const beforeMutation = (
+    await db.query("SELECT state,version,assignee_id FROM review_cases WHERE id=$1", [malformedCase])
+  ).rows[0];
+  const actionCountBefore = (
+    await db.query("SELECT count(*)::int AS count FROM review_actions WHERE case_id=$1", [malformedCase])
+  ).rows[0].count;
+  const rejectedMutation = await call(
+    a,
+    "/api/operations/reviews/" + malformedCase + "/actions",
+    "POST",
+    { action: "note", note: "Must not affect foreign shipment", version: 0 },
+  );
+  assert.equal(rejectedMutation.status, 404);
+  const afterMutation = (
+    await db.query("SELECT state,version,assignee_id FROM review_cases WHERE id=$1", [malformedCase])
+  ).rows[0];
+  const actionCountAfter = (
+    await db.query("SELECT count(*)::int AS count FROM review_actions WHERE case_id=$1", [malformedCase])
+  ).rows[0].count;
+  assert.deepEqual(afterMutation, beforeMutation);
+  assert.equal(actionCountAfter, actionCountBefore);
+
   const notificationsResponse = await call(a, "/api/operations/notifications");
   assert.equal(notificationsResponse.status, 200);
   const notifications = await notificationsResponse.json();
