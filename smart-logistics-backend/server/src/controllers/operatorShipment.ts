@@ -13,7 +13,7 @@ export const operatorShipmentInput = z
 const localSource = "workspace-operator";
 export async function shipmentProviders(req: AuthRequest, res: Response) {
   const rows = await connection.query(
-    "SELECT provider FROM logistics_connectors WHERE workspace_id=$1 AND enabled AND provider<>$2 ORDER BY provider",
+    "SELECT provider FROM logistics_connectors WHERE workspace_id=$1 AND enabled AND provider_accepted_at IS NOT NULL AND provider<>$2 ORDER BY provider",
     [req.user!.workspaceId, localSource],
   );
   res.json({ providers: rows.rows.map((r) => r.provider) });
@@ -66,7 +66,7 @@ export async function createOperatorShipment(req: AuthRequest, res: Response) {
       (input.provider === localSource ||
         !(
           await tx.query(
-            "SELECT 1 FROM logistics_connectors WHERE workspace_id=$1 AND provider=$2 AND enabled FOR SHARE",
+            "SELECT 1 FROM logistics_connectors WHERE workspace_id=$1 AND provider=$2 AND enabled AND provider_accepted_at IS NOT NULL FOR SHARE",
             [workspace, provider],
           )
         ).rowCount)
