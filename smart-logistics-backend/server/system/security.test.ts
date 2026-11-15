@@ -265,6 +265,24 @@ test("unknown-mode filtering cannot escape the workspace predicate", async () =>
   assert.equal(result.items[0].trackingNumber, "FILTER-A");
 });
 
+test("shipment mode filters match the labels shown for mixed-case carrier data", async () => {
+  const workspace = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Mode filter')", [workspace]);
+  const { cookie } = await account("user", workspace);
+  for (const mode of ["OCEAN", "Sea", "AIR"]) {
+    await connection.query(
+      "INSERT INTO shipments(workspace_id,tracking_number,origin,destination,transport_mode) VALUES($1,$2,'Start','End',$2)",
+      [workspace, mode],
+    );
+  }
+  for (const [mode, expected] of [["Sea", ["OCEAN", "Sea"]], ["Air", ["AIR"]]] as const) {
+    const response = await request(`/api/operations/shipments?limit=10&mode=${mode}`, undefined, cookie);
+    assert.equal(response.status, 200);
+    const { items } = await response.json();
+    assert.deepEqual(items.map((shipment: { transportMode: string }) => shipment.transportMode).sort(), expected);
+  }
+});
+
 test("provider events reduce deterministically across ordering, sparse fields, duplicate identity and workspace/provider collision", async () => {
   const workspace = randomUUID();
   await connection.query(

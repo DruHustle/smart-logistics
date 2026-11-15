@@ -107,11 +107,10 @@ export function recordFilters(
             sql`(${shipments.transportMode} IS NULL OR lower(${shipments.transportMode}) NOT IN ('road','rail','air','sea','ocean','parcel','other'))`,
           );
         else if (query === "mode" && value.toLowerCase() === "sea")
-          conditions.push(inArray(shipments.transportMode, ["sea", "ocean"]));
-        else
-          conditions.push(
-            eq(column, query === "mode" ? value.toLowerCase() : value),
-          );
+          conditions.push(sql`lower(${shipments.transportMode}) in ('sea','ocean')`);
+        else if (query === "mode")
+          conditions.push(sql`lower(${shipments.transportMode}) = ${value.toLowerCase()}`);
+        else conditions.push(eq(column, value));
       }
     }
   for (const key of ["from", "to"] as const)
