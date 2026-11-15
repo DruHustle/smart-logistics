@@ -66,3 +66,8 @@ Apply Node API migration 010 before the candidate API starts. Register the Logis
 New sign-in binds an ID token, verified email, code, PKCE verifier, nonce and stable managed subject. An existing Onesa account lookup uses the historical Portal issuer namespace with the verified Onesa user UUID. The original local password proof remains mandatory for linking a pre-federation account. The product enforces local workspace and object permissions. A scoped platform role cannot elevate a Logistics engineer into a local administrator. An existing Logistics administrator also needs a valid product-admin role and a recent provider MFA timestamp.
 
 Protected requests verify the audience, product and role against the locally available key set. An access token lasts up to 300 seconds. Human sign-in requires the provider; valid existing requests do not contact Identity or Documents. Returning to Portal mode preserves records and post-cutover local permissions. Retain migration 010, reconcile authority changes and require fresh sign-in to the selected authority.
+
+
+### External carrier acceptance gate
+
+Enabling a `logistics_connectors` row is configuration, not provider acceptance. Migration `011_provider_acceptance.sql` adds a nullable `provider_accepted_at`; it remains unset by default. The API hides unaccepted carriers from shipment-provider discovery and rejects operator-created carrier shipments and signed carrier events until the authorized operator records provider acceptance from independently verified evidence. Do not set this field to make tests or demos pass. Synthetic acceptance fixtures exist only in isolated tests.
