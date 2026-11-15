@@ -79,7 +79,7 @@ test('provider readiness and webhook authentication fail closed for malformed se
  try{
   const valid='v'.repeat(40);
   process.env.LOGISTICS_WEBHOOK_SECRETS=JSON.stringify({
-   carrier:valid,short:'s'.repeat(31),numeric:42,array:[valid],padded:' '+valid,multiline:valid+'\\n'
+   carrier:valid,short:'s'.repeat(31),numeric:42,array:[valid],padded:' '+valid,multiline:valid+'\n'
   });
   assert.equal(providerWebhookSecret('carrier'),valid);
   assert.equal(hasProviderWebhookSecret('carrier'),true);
