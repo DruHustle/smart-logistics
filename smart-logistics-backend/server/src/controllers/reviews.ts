@@ -4,6 +4,12 @@ import { connection } from "../config/db";
 import { AuthRequest } from "../middleware/auth";
 import { numericId, readBounds } from "./operationalReads";
 import { forecastConfiguration, sapConfiguration } from "../config/integrations";
+// Ownership must match across every link, including legacy review records.
+const reviewShipments = `review_cases c JOIN shipments s
+  ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id`;
+const reviewNotifications = `${reviewShipments} JOIN review_actions a
+  ON a.case_id=c.id AND a.workspace_id=c.workspace_id`;
+
 export async function reviewFeed(req: AuthRequest, res: Response) {
   let bounds;
   try {
@@ -20,13 +26,13 @@ export async function reviewFeed(req: AuthRequest, res: Response) {
     return res.status(400).json({ error: "Invalid review state" });
   const total = (
     await connection.query(
-      "SELECT count(*)::int AS total FROM review_cases WHERE workspace_id=$1 AND ($2::text IS NULL OR state=$2)",
+      `SELECT count(*)::int AS total FROM ${reviewShipments} WHERE c.workspace_id=$1 AND ($2::text IS NULL OR c.state=$2)`,
       [req.user!.workspaceId, state ?? null],
     )
   ).rows[0].total;
   const result = await connection.query(
     `SELECT c.id,c.shipment_id AS "shipmentId",s.tracking_number AS "trackingNumber",c.state,c.assignee_id AS "assigneeId",c.version,c.updated_at AS "updatedAt"
- FROM review_cases c JOIN shipments s ON s.id=c.shipment_id WHERE c.workspace_id=$1 AND ($4::text IS NULL OR c.state=$4) ORDER BY c.updated_at DESC,c.id DESC LIMIT $2 OFFSET $3`,
+ FROM ${reviewShipments} WHERE c.workspace_id=$1 AND ($4::text IS NULL OR c.state=$4) ORDER BY c.updated_at DESC,c.id DESC LIMIT $2 OFFSET $3`,
     [req.user!.workspaceId, bounds.limit, bounds.offset, state ?? null],
   );
   res.json({
@@ -41,7 +47,7 @@ export async function reviewHistory(req: AuthRequest, res: Response) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid case ID" });
   const found = await connection.query(
-    "SELECT id FROM review_cases WHERE id=$1 AND workspace_id=$2",
+    `SELECT c.id FROM ${reviewShipments} WHERE c.id=$1 AND c.workspace_id=$2`,
     [id, req.user!.workspaceId],
   );
   if (!found.rowCount)
@@ -61,7 +67,7 @@ export async function actOnReview(req: AuthRequest, res: Response) {
     await tx.query("BEGIN");
     const row = (
       await tx.query(
-        "SELECT * FROM review_cases WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+        `SELECT c.* FROM ${reviewShipments} WHERE c.id=$1 AND c.workspace_id=$2 FOR UPDATE OF c`,
         [id, req.user!.workspaceId],
       )
     ).rows[0];
@@ -130,7 +136,7 @@ export async function actOnReview(req: AuthRequest, res: Response) {
 export async function notifications(req: AuthRequest, res: Response) {
   const data = await connection.query(
     `SELECT a.id,a.case_id AS "caseId",c.shipment_id AS "shipmentId",a.action,a.note,a.occurred_at AS "occurredAt",(r.user_id IS NOT NULL) AS read,s.tracking_number AS "trackingNumber"
- FROM review_actions a JOIN review_cases c ON c.id=a.case_id JOIN shipments s ON s.id=c.shipment_id
+ FROM ${reviewNotifications}
  LEFT JOIN notification_reads r ON r.action_id=a.id AND r.user_id=$1 WHERE a.workspace_id=$2 ORDER BY a.id DESC LIMIT 100`,
     [req.user!.id, req.user!.workspaceId],
   );
@@ -139,14 +145,14 @@ export async function notifications(req: AuthRequest, res: Response) {
 export async function readNotification(req: AuthRequest, res: Response) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid notification ID" });
-  const result = await connection.query(
-    `INSERT INTO notification_reads(user_id,action_id) SELECT $1,id FROM review_actions WHERE id=$2 AND workspace_id=$3
- ON CONFLICT DO NOTHING RETURNING action_id`,
-    [req.user!.id, id, req.user!.workspaceId],
-  );
   const exists = await connection.query(
-    "SELECT 1 FROM review_actions WHERE id=$1 AND workspace_id=$2",
-    [id, req.user!.workspaceId],
+    `WITH visible AS (
+       SELECT a.id FROM ${reviewNotifications} WHERE a.id=$2 AND c.workspace_id=$3
+     ), marked AS (
+       INSERT INTO notification_reads(user_id,action_id)
+       SELECT $1,id FROM visible ON CONFLICT DO NOTHING
+     ) SELECT id FROM visible`,
+    [req.user!.id, id, req.user!.workspaceId],
   );
   if (!exists.rowCount)
     return res.status(404).json({ error: "Notification not found" });

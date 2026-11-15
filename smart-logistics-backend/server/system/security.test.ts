@@ -992,3 +992,33 @@ test("review queue state filters and pages retain older cases in the authorized 
     400,
   );
 });
+
+test("inconsistent historical review ownership is excluded throughout the operator workflow", async () => {
+  const workspace = randomUUID(), other = randomUUID();
+  await connection.query("INSERT INTO workspaces (id,name) VALUES ($1,'Review A'),($2,'Review B')", [workspace, other]);
+  const { cookie } = await account("engineer", workspace);
+  const shipment = (await connection.query(
+    "INSERT INTO shipments(workspace_id,tracking_number,origin,destination) VALUES ($1,$2,'A','B') RETURNING id",
+    [other, randomUUID()],
+  )).rows[0].id;
+  const review = (await connection.query(
+    "INSERT INTO review_cases(workspace_id,shipment_id) VALUES ($1,$2) RETURNING id", [workspace, shipment],
+  )).rows[0].id;
+  const action = (await connection.query(
+    "INSERT INTO review_actions(workspace_id,case_id,action) VALUES ($1,$2,'opened') RETURNING id", [workspace,review],
+  )).rows[0].id;
+  const feed = await request("/api/operations/reviews", undefined, cookie);
+  assert.equal(feed.status, 200);
+  const { total, items } = await feed.json();
+  assert.equal(total, 0);
+  assert.deepEqual(items, []);
+  const inbox = await request("/api/operations/notifications", undefined, cookie);
+  assert.equal(inbox.status, 200);
+  assert.deepEqual((await inbox.json()).items, []);
+  const history = `/api/operations/reviews/${review}/actions`;
+  assert.equal((await request(history, undefined, cookie)).status, 404);
+  assert.equal((await request(history, { action: 'acknowledge', version: 0 }, cookie)).status, 404);
+  assert.equal((await request(`/api/operations/notifications/${action}/read`, {}, cookie)).status, 404);
+  assert.equal((await connection.query("SELECT version FROM review_cases WHERE id=$1", [review])).rows[0].version, 0);
+  assert.equal((await connection.query("SELECT 1 FROM notification_reads WHERE action_id=$1", [action])).rowCount, 0);
+});
