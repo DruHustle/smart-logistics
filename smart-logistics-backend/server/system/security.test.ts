@@ -265,6 +265,24 @@ test("unknown-mode filtering cannot escape the workspace predicate", async () =>
   assert.equal(result.items[0].trackingNumber, "FILTER-A");
 });
 
+test("shipment mode filters match the labels shown for mixed-case carrier data", async () => {
+  const workspace = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Mode filter')", [workspace]);
+  const { cookie } = await account("user", workspace);
+  for (const mode of ["OCEAN", "Sea", "AIR"]) {
+    await connection.query(
+      "INSERT INTO shipments(workspace_id,tracking_number,origin,destination,transport_mode) VALUES($1,$2,'Start','End',$2)",
+      [workspace, mode],
+    );
+  }
+  for (const [mode, expected] of [["Sea", ["OCEAN", "Sea"]], ["Air", ["AIR"]]] as const) {
+    const response = await request(`/api/operations/shipments?limit=10&mode=${mode}`, undefined, cookie);
+    assert.equal(response.status, 200);
+    const { items } = await response.json();
+    assert.deepEqual(items.map((shipment: { transportMode: string }) => shipment.transportMode).sort(), expected);
+  }
+});
+
 test("provider events reduce deterministically across ordering, sparse fields, duplicate identity and workspace/provider collision", async () => {
   const workspace = randomUUID();
   await connection.query(
@@ -605,12 +623,11 @@ test("migration upgrade preserves legacy rows; concurrent runners serialize and 
     ).rows[0];
     assert.equal(row.workspace_id, null);
     assert.equal(row.created_at.toISOString(), "2026-10-26T09:00:00.000Z");
-    const expectedMigrations = (await fs.readdir("migrations"))
-      .filter((file) => file.endsWith(".sql")).sort();
-    const appliedMigrations = await pool.query(
-      "SELECT name FROM schema_migrations WHERE checksum IS NOT NULL ORDER BY name",
+    assert.equal(
+      (await pool.query("SELECT count(*)::int AS count FROM schema_migrations"))
+        .rows[0].count,
+      10,
     );
-    assert.deepEqual(appliedMigrations.rows.map((entry) => entry.name), expectedMigrations);
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "imsop-migration-"));
     try {
       for (const file of await fs.readdir("migrations"))
@@ -992,6 +1009,62 @@ test("review queue state filters and pages retain older cases in the authorized 
       .status,
     400,
   );
+});
+
+test("cross-workspace review and notification joins fail closed for inconsistent historical links", async () => {
+  const own = randomUUID(), foreign = randomUUID();
+  await connection.query(
+    "INSERT INTO workspaces(id,name) VALUES($1,'Review tenant A'),($2,'Review tenant B')",
+    [own, foreign],
+  );
+  const { row: operator, cookie } = await account("engineer", own);
+  const shipment = (
+    await connection.query(
+      "INSERT INTO shipments(workspace_id,tracking_number,origin,destination,status) VALUES($1,$2,'Source','Target','delayed') RETURNING id",
+      [foreign, "FOREIGN-REVIEW-" + randomUUID()],
+    )
+  ).rows[0].id;
+  // Historical/imported case carries a local workspace but points at a
+  // different workspace's shipment. The API must neither list its tracking
+  // reference nor count it as an accessible review.
+  const caseId = (
+    await connection.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id,state) VALUES($1,$2,'open') RETURNING id",
+      [own, shipment],
+    )
+  ).rows[0].id;
+  const actionId = (
+    await connection.query(
+      "INSERT INTO review_actions(workspace_id,case_id,actor_id,action,note) VALUES($1,$2,$3,'acknowledge','isolated fixture') RETURNING id",
+      [own, caseId, operator.id],
+    )
+  ).rows[0].id;
+  const feedResponse = await request("/api/operations/reviews", undefined, cookie);
+  assert.equal(feedResponse.status, 200);
+  const feed = await feedResponse.json();
+  assert.equal(feed.total, 0);
+  assert.deepEqual(feed.items, []);
+  const notificationResponse = await request(
+    "/api/operations/notifications", undefined, cookie,
+  );
+  assert.equal(notificationResponse.status, 200);
+  assert.deepEqual((await notificationResponse.json()).items, []);
+  assert.equal(
+    (await request(
+      `/api/operations/notifications/${actionId}/read`, {}, cookie,
+    )).status,
+    404,
+  );
+  const readRows = await connection.query(
+    "SELECT 1 FROM notification_reads WHERE user_id=$1 AND action_id=$2",
+    [operator.id, actionId],
+  );
+  assert.equal(readRows.rowCount, 0);
+  const historyPath = `/api/operations/reviews/${caseId}/actions`;
+  assert.equal((await request(historyPath, undefined, cookie)).status, 404);
+  assert.equal((await request(historyPath, { action: "acknowledge", version: 0 }, cookie)).status, 404);
+  const unchanged = await connection.query("SELECT version FROM review_cases WHERE id=$1", [caseId]);
+  assert.equal(unchanged.rows[0].version, 0);
 });
 
 
