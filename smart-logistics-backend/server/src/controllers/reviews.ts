@@ -164,7 +164,7 @@ export async function readNotification(req: AuthRequest, res: Response) {
 }
 export async function integrationStatus(req: AuthRequest, res: Response) {
   const items = await connection.query(
-    `SELECT c.provider,c.enabled,max(e.received_at) AS "lastReceivedAt",max(e.occurred_at) AS "lastObservedAt",count(e.id)::int AS "receiptCount"
+    `SELECT c.provider,c.enabled,c.provider_accepted_at AS "providerAcceptedAt",max(e.received_at) AS "lastReceivedAt",max(e.occurred_at) AS "lastObservedAt",count(e.id)::int AS "receiptCount"
  FROM logistics_connectors c LEFT JOIN logistics_events e ON e.workspace_id=c.workspace_id AND e.provider=c.provider
  WHERE c.workspace_id=$1 GROUP BY c.provider,c.enabled ORDER BY c.provider LIMIT 100`,
     [req.user!.workspaceId],
@@ -185,6 +185,8 @@ export async function integrationStatus(req: AuthRequest, res: Response) {
     },
     items: items.rows.map((item) => ({
       ...item,
+      providerAccepted: Boolean(item.providerAcceptedAt),
+      acceptanceStatus: item.providerAcceptedAt ? "accepted" : "pending-provider-acceptance",
       signatureConfigured: Boolean(
         JSON.parse(process.env.LOGISTICS_WEBHOOK_SECRETS || "{}")[
           item.provider
