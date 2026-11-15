@@ -279,7 +279,7 @@ test("provider events reduce deterministically across ordering, sparse fields, d
     [p2]: secret,
   });
   await connection.query(
-    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$2),($3,$2)",
+    "INSERT INTO logistics_connectors(provider,workspace_id,provider_accepted_at) VALUES($1,$2,now()),($3,$2,now())",
     [p, workspace, p2],
   );
   const { cookie } = await account("engineer", workspace),
@@ -695,7 +695,7 @@ test("delivery evidence corrections and currency reports preserve original promi
     [workspace],
   );
   await connection.query(
-    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$2)",
+    "INSERT INTO logistics_connectors(provider,workspace_id,provider_accepted_at) VALUES($1,$2,now())",
     [provider, workspace],
   );
   process.env.LOGISTICS_WEBHOOK_SECRETS = JSON.stringify({
@@ -992,4 +992,51 @@ test("review queue state filters and pages retain older cases in the authorized 
       .status,
     400,
   );
+});
+
+
+test("carrier connectors are not advertised or usable until provider acceptance is recorded", async () => {
+  const workspace = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Provider acceptance')", [workspace]);
+  const { cookie } = await account("engineer", workspace);
+  const pending = "pending-" + randomUUID();
+  const accepted = "accepted-" + randomUUID();
+  await connection.query(
+    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$3),($2,$3)",
+    [pending, accepted, workspace],
+  );
+  await connection.query(
+    "UPDATE logistics_connectors SET provider_accepted_at=now() WHERE provider=$1",
+    [accepted],
+  );
+
+  const providers = await request("/api/operations/shipment-providers", undefined, cookie);
+  assert.equal(providers.status, 200);
+  assert.deepEqual((await providers.json()).providers, [accepted]);
+
+  const create = async (provider: string) => fetch(base + "/api/operations/shipments", {
+    method: "POST",
+    headers: {
+      Cookie: cookie,
+      Origin: "http://localhost:5173",
+      "Content-Type": "application/json",
+      "Idempotency-Key": randomUUID(),
+    },
+    body: JSON.stringify({
+      trackingNumber: "ACCEPTANCE-" + randomUUID(),
+      origin: "Warehouse A",
+      destination: "Customer B",
+      provider,
+    }),
+  });
+  assert.equal((await create(pending)).status, 404);
+  const acceptedCreate = await create(accepted);
+  assert.equal(acceptedCreate.status, 201, await acceptedCreate.clone().text());
+  const saved = await acceptedCreate.json();
+  const shipment = await connection.query(
+    "SELECT provider,status FROM shipments WHERE id=$1 AND workspace_id=$2",
+    [saved.id, workspace],
+  );
+  assert.equal(shipment.rows[0].provider, accepted);
+  assert.equal(shipment.rows[0].status, "pending");
 });
