@@ -81,8 +81,8 @@ export const authenticate = async (
       if (identity.iss !== row.onesa_issuer || identity.sub !== row.onesa_subject ||
           (row.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
         throw new InactiveIdentity();
-      // Legacy Portal supplies an effective staff role. A managed grant must also match local authorization.
-      if (!config.managed && identity.onesa_product_roles.logistics === "admin") row.role = "admin";
+      // The Portal grant is an upper bound, not a role assignment. Preserve the
+      // locally provisioned Logistics role even when Portal claims admin.
     }
     req.user = {
       id: row.id,
