@@ -57,7 +57,11 @@ export async function reviewHistory(req: AuthRequest, res: Response) {
   if (!found.rowCount)
     return res.status(404).json({ error: "Review case not found" });
   const result = await connection.query(
-    `SELECT a.id,a.actor_id AS "actorId",coalesce(u.name,'System') AS "actorName",a.action,a.note,a.occurred_at AS "occurredAt" FROM review_actions a LEFT JOIN users u ON u.id=a.actor_id WHERE a.case_id=$1 AND a.workspace_id=$2 ORDER BY a.id DESC LIMIT 100`,
+    `SELECT a.id,CASE WHEN u.id IS NULL THEN NULL ELSE a.actor_id END AS "actorId",coalesce(u.name,'System') AS "actorName",a.action,a.note,a.occurred_at AS "occurredAt"
+     FROM review_actions a
+     LEFT JOIN workspace_memberships m ON m.user_id=a.actor_id AND m.workspace_id=a.workspace_id
+     LEFT JOIN users u ON u.id=m.user_id AND NOT u.disabled
+     WHERE a.case_id=$1 AND a.workspace_id=$2 ORDER BY a.id DESC LIMIT 100`,
     [id, req.user!.workspaceId],
   );
   res.json({ items: result.rows });
