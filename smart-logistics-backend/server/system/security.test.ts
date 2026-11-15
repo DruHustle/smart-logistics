@@ -1042,4 +1042,9 @@ test("cross-workspace review and notification joins fail closed for inconsistent
     [operator.id, actionId],
   );
   assert.equal(readRows.rowCount, 0);
+  const historyPath = `/api/operations/reviews/${caseId}/actions`;
+  assert.equal((await request(historyPath, undefined, cookie)).status, 404);
+  assert.equal((await request(historyPath, { action: "acknowledge", version: 0 }, cookie)).status, 404);
+  const unchanged = await connection.query("SELECT version FROM review_cases WHERE id=$1", [caseId]);
+  assert.equal(unchanged.rows[0].version, 0);
 });
