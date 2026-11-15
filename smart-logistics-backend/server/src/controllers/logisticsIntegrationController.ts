@@ -20,6 +20,11 @@ export function projectEvents(events: any[]) {
   let terminal = false;
   for (const stored of events) {
     const event = JSON.parse(stored.payload);
+    const correction = event.eventType === "shipment.corrected";
+    // Delivery and cancellation are both terminal. Later provider events may
+    // be delayed or out of sequence; they must not rewrite the closed snapshot.
+    // Only an explicit correction is allowed to reopen or amend terminal state.
+    if (terminal && !correction) continue;
     for (const field of [
       "origin",
       "destination",
@@ -42,15 +47,9 @@ export function projectEvents(events: any[]) {
       snapshot.latitude = event.location?.latitude ?? null;
       snapshot.longitude = event.location?.longitude ?? null;
     }
-    if (
-      !terminal ||
-      event.eventType === "shipment.corrected" ||
-      event.status === "delivered"
-    ) {
-      snapshot.status = event.status;
-      snapshot.provenance.status = stored.id;
-    }
-    terminal = snapshot.status === "delivered";
+    snapshot.status = event.status;
+    snapshot.provenance.status = stored.id;
+    terminal = snapshot.status === "delivered" || snapshot.status === "cancelled";
     snapshot.eventId = stored.id;
     snapshot.observedAt = stored.occurred_at;
     snapshot.receivedAt = stored.received_at;

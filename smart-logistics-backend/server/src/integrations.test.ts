@@ -11,6 +11,7 @@ import {
   serverSecret,
 } from "./config/integrations";
 import { readSapMetadata } from "./services/sap";
+import { projectEvents } from "./controllers/logisticsIntegrationController";
 const keys = [
   "FORECAST_ENABLED",
   "FORECAST_PROVIDER_URL",
@@ -212,3 +213,86 @@ test("forecasting supports server-only file credentials and validates configured
       }
     },
   ));
+
+
+test("tracking projection freezes delivered and cancelled shipments until an explicit correction", () => {
+  const row = (id: string, event: Record<string, unknown>, at: string) => ({
+    id,
+    payload: JSON.stringify(event),
+    occurred_at: new Date(at),
+    received_at: new Date(at),
+  });
+  const event = (eventType: string, status: string, fields: Record<string, unknown> = {}) => ({
+    eventType,
+    status,
+    ...fields,
+  });
+
+  const delivered = projectEvents([
+    row("created", event("shipment.created", "in_transit", {
+      destination: "Initial Depot",
+      estimatedArrival: "2026-11-17T12:00:00Z",
+      location: { latitude: 1, longitude: 2 },
+    }), "2026-11-15T08:00:00Z"),
+    row("delivered", event("shipment.delivered", "delivered", {
+      destination: "Delivered Dock",
+      actualArrival: "2026-11-15T09:00:00Z",
+      location: { latitude: 3, longitude: 4 },
+    }), "2026-11-15T09:00:00Z"),
+    row("late-update", event("shipment.location", "in_transit", {
+      destination: "Incorrect Depot",
+      estimatedArrival: "2026-11-19T12:00:00Z",
+      actualArrival: null,
+      location: { latitude: 5, longitude: 6 },
+    }), "2026-11-15T10:00:00Z"),
+  ]);
+  assert.equal(delivered.status, "delivered");
+  assert.equal(delivered.destination, "Delivered Dock");
+  assert.equal(delivered.actualArrival, "2026-11-15T09:00:00Z");
+  assert.equal(delivered.estimatedArrival, "2026-11-17T12:00:00Z");
+  assert.equal(delivered.latitude, 3);
+  assert.equal(delivered.longitude, 4);
+  assert.equal(delivered.eventId, "delivered");
+
+  const cancelled = projectEvents([
+    row("created", event("shipment.created", "in_transit", {
+      destination: "Dispatch Yard",
+      location: { latitude: 7, longitude: 8 },
+    }), "2026-11-15T08:00:00Z"),
+    row("cancelled", event("shipment.updated", "cancelled", {
+      destination: "Cancellation Hold",
+      location: { latitude: 9, longitude: 10 },
+    }), "2026-11-15T09:00:00Z"),
+    row("late-gps", event("shipment.location", "in_transit", {
+      destination: "Unverified Destination",
+      location: { latitude: 11, longitude: 12 },
+    }), "2026-11-15T10:00:00Z"),
+  ]);
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(cancelled.destination, "Cancellation Hold");
+  assert.equal(cancelled.latitude, 9);
+  assert.equal(cancelled.longitude, 10);
+  assert.equal(cancelled.eventId, "cancelled");
+
+  const corrected = projectEvents([
+    row("delivered", event("shipment.delivered", "delivered", {
+      destination: "Old Destination",
+      actualArrival: "2026-11-15T09:00:00Z",
+      location: { latitude: 13, longitude: 14 },
+    }), "2026-11-15T09:00:00Z"),
+    row("correction", event("shipment.corrected", "in_transit", {
+      destination: "Corrected Destination",
+      actualArrival: null,
+      location: null,
+    }), "2026-11-15T10:00:00Z"),
+    row("after-correction", event("shipment.location", "in_transit", {
+      location: { latitude: 15, longitude: 16 },
+    }), "2026-11-15T11:00:00Z"),
+  ]);
+  assert.equal(corrected.status, "in_transit");
+  assert.equal(corrected.destination, "Corrected Destination");
+  assert.equal(corrected.actualArrival, null);
+  assert.equal(corrected.latitude, 15);
+  assert.equal(corrected.longitude, 16);
+  assert.equal(corrected.eventId, "after-correction");
+});
