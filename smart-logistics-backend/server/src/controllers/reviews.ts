@@ -2,6 +2,7 @@ import { externalMailAvailable } from "../services/notificationDelivery";
 import { Response } from "express";
 import { connection } from "../config/db";
 import { AuthRequest } from "../middleware/auth";
+import { hasProviderWebhookSecret } from "../middleware/logisticsWebhookAuth";
 import { numericId, readBounds } from "./operationalReads";
 import { forecastConfiguration, sapConfiguration } from "../config/integrations";
 export async function reviewFeed(req: AuthRequest, res: Response) {
@@ -191,11 +192,7 @@ export async function integrationStatus(req: AuthRequest, res: Response) {
       ...item,
       providerAccepted: Boolean(item.providerAcceptedAt),
       acceptanceStatus: item.providerAcceptedAt ? "accepted" : "pending-provider-acceptance",
-      signatureConfigured: Boolean(
-        JSON.parse(process.env.LOGISTICS_WEBHOOK_SECRETS || "{}")[
-          item.provider
-        ],
-      ),
+      signatureConfigured: hasProviderWebhookSecret(item.provider),
       connectivity: "not probed",
       sync: "event intake only",
     })),
