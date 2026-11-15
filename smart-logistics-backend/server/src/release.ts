@@ -14,6 +14,6 @@ export const release = {
     "shipment-stock-v1",
     "operator-shipment-creation-v1",
   ],
-  nodeSchema: "010_session_token_issuer.sql",
+  nodeSchema: "011_provider_acceptance.sql",
   supplyChainSchema: "202611140001_ShipmentStock",
 };
