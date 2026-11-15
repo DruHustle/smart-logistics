@@ -67,7 +67,7 @@ export async function ingestLogisticsEvent(req: Request, res: Response) {
     await tx.query("BEGIN");
     const connector = (
       await tx.query(
-        "SELECT workspace_id FROM logistics_connectors WHERE provider=$1 AND enabled FOR SHARE",
+        "SELECT workspace_id FROM logistics_connectors WHERE provider=$1 AND enabled AND provider_accepted_at IS NOT NULL FOR SHARE",
         [provider],
       )
     ).rows[0];
