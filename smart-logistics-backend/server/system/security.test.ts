@@ -992,3 +992,54 @@ test("review queue state filters and pages retain older cases in the authorized 
     400,
   );
 });
+
+test("cross-workspace review and notification joins fail closed for inconsistent historical links", async () => {
+  const own = randomUUID(), foreign = randomUUID();
+  await connection.query(
+    "INSERT INTO workspaces(id,name) VALUES($1,'Review tenant A'),($2,'Review tenant B')",
+    [own, foreign],
+  );
+  const { row: operator, cookie } = await account("engineer", own);
+  const shipment = (
+    await connection.query(
+      "INSERT INTO shipments(workspace_id,tracking_number,origin,destination,status) VALUES($1,$2,'Source','Target','delayed') RETURNING id",
+      [foreign, "FOREIGN-REVIEW-" + randomUUID()],
+    )
+  ).rows[0].id;
+  // Historical/imported case carries a local workspace but points at a
+  // different workspace's shipment. The API must neither list its tracking
+  // reference nor count it as an accessible review.
+  const caseId = (
+    await connection.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id,state) VALUES($1,$2,'open') RETURNING id",
+      [own, shipment],
+    )
+  ).rows[0].id;
+  const actionId = (
+    await connection.query(
+      "INSERT INTO review_actions(workspace_id,case_id,actor_id,action,note) VALUES($1,$2,$3,'acknowledge','isolated fixture') RETURNING id",
+      [own, caseId, operator.id],
+    )
+  ).rows[0].id;
+  const feedResponse = await request("/api/operations/reviews", undefined, cookie);
+  assert.equal(feedResponse.status, 200);
+  const feed = await feedResponse.json();
+  assert.equal(feed.total, 0);
+  assert.deepEqual(feed.items, []);
+  const notificationResponse = await request(
+    "/api/operations/notifications", undefined, cookie,
+  );
+  assert.equal(notificationResponse.status, 200);
+  assert.deepEqual((await notificationResponse.json()).items, []);
+  assert.equal(
+    (await request(
+      `/api/operations/notifications/${actionId}/read`, {}, cookie,
+    )).status,
+    404,
+  );
+  const readRows = await connection.query(
+    "SELECT 1 FROM notification_reads WHERE user_id=$1 AND action_id=$2",
+    [operator.id, actionId],
+  );
+  assert.equal(readRows.rowCount, 0);
+});
