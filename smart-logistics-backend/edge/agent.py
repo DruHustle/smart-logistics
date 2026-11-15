@@ -17,11 +17,24 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from uuid import UUID
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
 MAX_BYTES = 16384
+
+
+class RejectRedirects(HTTPRedirectHandler):
+    """Never treat a redirected request as a successful event delivery."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def no_redirect_open(request, timeout):
+    # A 301/302 can turn urllib's POST into a GET. Following it and accepting
+    # the final 200 would delete an event the gateway never received.
+    return build_opener(RejectRedirects()).open(request, timeout=timeout)
 
 
 def validate_event(value, allowed_sources):
@@ -149,7 +162,7 @@ class EdgeState:
 
 class EdgeAgent:
     def __init__(self, state, gateway_id, sources, ingress_token, outbound_secret,
-                 api_origin, allow_loopback_http=False, opener=urlopen):
+                 api_origin, allow_loopback_http=False, opener=None):
         if not ID.fullmatch(gateway_id) or len(ingress_token) < 32 or len(outbound_secret) < 32:
             raise ValueError("invalid_agent_identity_or_credentials")
         parsed = urlsplit(api_origin)
@@ -162,7 +175,7 @@ class EdgeAgent:
         self.state, self.gateway_id = state, gateway_id
         self.sources, self.ingress_token, self.outbound_secret = set(sources), ingress_token, outbound_secret
         self.target = api_origin.rstrip("/") + "/api/edge/" + gateway_id + "/events"
-        self.opener = opener
+        self.opener = opener if opener is not None else no_redirect_open
 
     def ingest(self, payload, presented_token):
         if not hmac.compare_digest(presented_token, self.ingress_token):
