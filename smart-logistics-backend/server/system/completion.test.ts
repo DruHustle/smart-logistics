@@ -651,3 +651,57 @@ test("outbound stock maintains the canonical ledger under parallel grants, retri
  const events=await db.query("SELECT action,observation FROM supply_chain.shipment_stock_events WHERE allocation_id=$1",[saved[0].allocationId]);
  assert.equal(events.rowCount,3);assert(events.rows.some(e=>e.observation===delivery.observation));
 });
+
+test("mismatched review ownership cannot surface shipment identities in feeds or notifications", async () => {
+  // Legacy/recovery data can contain an FK-valid case that points to a shipment
+  // belonging to another workspace. Listing and notification queries must not
+  // trust only the case/action workspace while joining to private shipment data.
+  const tracking = "FOREIGN-REVIEW-" + randomUUID();
+  const foreignShipment = (
+    await db.query(
+      "INSERT INTO shipments(workspace_id,provider,tracking_number,origin,destination,status) VALUES($1,'isolated-review',$2,'Foreign origin','Foreign destination','exception') RETURNING id",
+      [b.workspace, tracking],
+    )
+  ).rows[0].id;
+  const malformedCase = (
+    await db.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id) VALUES($1,$2) RETURNING id",
+      [a.workspace, foreignShipment],
+    )
+  ).rows[0].id;
+  const foreignCase = (
+    await db.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id) VALUES($1,$2) RETURNING id",
+      [b.workspace, foreignShipment],
+    )
+  ).rows[0].id;
+  const malformedAction = (
+    await db.query(
+      "INSERT INTO review_actions(workspace_id,case_id,action) VALUES($1,$2,'opened') RETURNING id",
+      [a.workspace, malformedCase],
+    )
+  ).rows[0].id;
+  const crossCaseAction = (
+    await db.query(
+      "INSERT INTO review_actions(workspace_id,case_id,action) VALUES($1,$2,'opened') RETURNING id",
+      [a.workspace, foreignCase],
+    )
+  ).rows[0].id;
+
+  const feedResponse = await call(a, "/api/operations/reviews?limit=50");
+  assert.equal(feedResponse.status, 200);
+  const feed = await feedResponse.json();
+  assert(!feed.items.some((item: any) => item.id === malformedCase));
+  assert(!JSON.stringify(feed).includes(tracking));
+  assert.equal((await call(a, "/api/operations/reviews/" + malformedCase)).status, 404);
+
+  const notificationsResponse = await call(a, "/api/operations/notifications");
+  assert.equal(notificationsResponse.status, 200);
+  const notifications = await notificationsResponse.json();
+  assert(!notifications.items.some((item: any) => [malformedAction, crossCaseAction].includes(item.id)));
+  assert(!JSON.stringify(notifications).includes(tracking));
+  for (const id of [malformedAction, crossCaseAction]) {
+    const response = await call(a, "/api/operations/notifications/" + id + "/read", "POST", {});
+    assert.equal(response.status, 404);
+  }
+});
