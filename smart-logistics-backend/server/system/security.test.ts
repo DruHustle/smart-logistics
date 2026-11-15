@@ -1,6 +1,6 @@
 import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import app from "../src/app";
@@ -1030,6 +1030,36 @@ test("carrier connectors are not advertised or usable until provider acceptance 
     }),
   });
   assert.equal((await create(pending)).status, 404);
+
+  const secret = "provider-acceptance-fixture-secret-at-least-32";
+  process.env.LOGISTICS_WEBHOOK_SECRETS = JSON.stringify({ [pending]: secret });
+  const event = {
+    eventId: randomUUID(),
+    eventType: "shipment.updated",
+    trackingNumber: "UNACCEPTED-" + randomUUID(),
+    status: "in_transit",
+    occurredAt: new Date().toISOString(),
+  };
+  const body = JSON.stringify(event);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = "sha256=" + createHmac("sha256", secret)
+    .update(timestamp + "." + body)
+    .digest("hex");
+  const webhook = await fetch(base + "/api/integrations/logistics/" + pending + "/events", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-imsop-timestamp": timestamp,
+      "x-imsop-signature": signature,
+    },
+    body,
+  });
+  assert.equal(webhook.status, 403);
+  const notIngested = await connection.query(
+    "SELECT 1 FROM logistics_events WHERE workspace_id=$1 AND provider=$2 AND event_id=$3",
+    [workspace, pending, event.eventId],
+  );
+  assert.equal(notIngested.rowCount, 0);
   const acceptedCreate = await create(accepted);
   assert.equal(acceptedCreate.status, 201, await acceptedCreate.clone().text());
   const saved = await acceptedCreate.json();
