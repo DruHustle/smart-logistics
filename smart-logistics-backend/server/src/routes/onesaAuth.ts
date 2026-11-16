@@ -8,7 +8,6 @@ import {
   exchangeCode,
   identityConfig,
   InactiveIdentity,
-  liveIdentity,
   randomValue,
   sealToken,
   safeReturnPath,
@@ -16,7 +15,40 @@ import {
 import { verifyPassword } from "../services/passwords";
 import { rateLimit } from "../middleware/rateLimit";
 
+import { exchangeNativeCode, nativeClient, nativeRedirect, nativeRequest } from "../services/nativeAuthorization";
+import { accessIdentity, tokenProfile } from "../services/managedOnesa";
+
 const router = Router();
+router.get("/native/config", (_req, res) => {
+  const config = identityConfig();
+  const client = config?.managed && nativeClient(config.client);
+  if (!config?.managed || !client) return res.sendStatus(503);
+  return res.json({issuer: config.issuer, audience: config.managed.audience, client, redirect: nativeRedirect});
+});
+router.post("/native/exchange", rateLimit(15 * 60_000, 15), async (req, res) => {
+  const input = nativeRequest.safeParse(req.body);
+  if (!input.success) return res.sendStatus(400);
+  try {
+    const config = identityConfig();
+    const client = config?.managed && nativeClient(config.client);
+    if (!config?.managed || !client) return res.sendStatus(503);
+    const tokens = await exchangeNativeCode(config.issuer, client, input.data);
+    if (!tokens) return res.sendStatus(401);
+    const identity = accessIdentity(config.issuer, client, tokens.access_token, config.managed);
+    tokenProfile(config.issuer, client, tokens.id_token, input.data.nonce, identity.providerSubject, config.managed);
+    const {rows: [user]} = await connection.query(
+      `SELECT id,role,active_workspace_id AS "activeWorkspaceId",session_version AS "sessionVersion"
+       FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2 AND NOT disabled`,
+      [identity.iss, identity.sub],
+    );
+    if (!user || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
+      return res.sendStatus(403);
+    const grant = JSON.stringify({nativeClient: client, token: tokens.access_token});
+    return res.json({session: await createSession(user, sealToken(grant), config.issuer)});
+  } catch (error) {
+    return res.sendStatus(error instanceof InactiveIdentity ? 401 : 503);
+  }
+});
 const transactionCookie = "__Host-onesa_logistics_login";
 const returnCookie = "__Host-onesa_logistics_return";
 const cookieOptions = {
@@ -118,8 +150,7 @@ router.get("/callback", async (req, res) => {
     let returnTo = "#/";
     try { returnTo = safeReturnPath(decodeURIComponent(encodedReturn ?? "")); } catch {}
     res.clearCookie(returnCookie, cookieOptions);
-    const token = await exchangeCode(config, query.data.code, txn.verifier);
-    const identity = await liveIdentity(config, token);
+    const {token, identity} = await exchangeCode(config, query.data.code, txn.verifier);
     const email = identity.email.toLowerCase();
     if (txn.link_user_id !== null) {
       const updated = await connection.query(
@@ -141,7 +172,7 @@ router.get("/callback", async (req, res) => {
       await connection.query(
         `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role) VALUES($1,$2,$3,$4,'!onesa-managed',$5)
          ON CONFLICT DO NOTHING`,
-        [...values, email, identity.name, identity.onesa_product_roles.logistics],
+        [...values, email, identity.name, config.managed ? 'user' : identity.onesa_product_roles.logistics],
       );
       ({
         rows: [user],
@@ -151,7 +182,7 @@ router.get("/callback", async (req, res) => {
     if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied");
     res.cookie(
       "imsop_access",
-      await createSession(user, sealToken(token)),
+      await createSession(user, sealToken(token), config.issuer),
       authCookieOptions(),
     );
     return res.redirect(303, config.origin + "/" + returnTo);

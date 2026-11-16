@@ -12,7 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "test:system": "NODE_ENV=test node --test --import tsx system/security.test.ts system/gateway.test.ts",
-    "test:onesa": "NODE_ENV=test node --test --import tsx system/onesaIdentity.test.ts"
+    "test:onesa": "NODE_ENV=test node --test --import tsx system/onesaIdentity.test.ts system/managed-identity.test.ts"
   },
   "keywords": [],
   "author": "",

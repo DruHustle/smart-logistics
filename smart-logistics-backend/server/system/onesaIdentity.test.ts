@@ -66,6 +66,16 @@ test("Portal callback preserves identity, least privilege, deep links and revoca
     const linkedMe=(await (await request("/api/auth/me",linked)).json()).user;
     assert.equal(linkedMe.id,String(local.id));assert.equal(linkedMe.role,"engineer");
     assert.equal((await request("/api/operations/shipments/"+foreign.id,linked)).status,404);
+    // A live Portal promotion must not elevate an existing locally linked engineer,
+    // even when the central admin grant has current MFA.
+    role="admin";
+    assert.equal((await (await request("/api/auth/me",linked)).json()).user.role,"engineer");
+    assert.equal((await request("/api/operations/reports/access",linked)).status,403);
+    const linkedWithAdminGrant=await signIn();
+    assert.equal((await (await request("/api/auth/me",linkedWithAdminGrant)).json()).user.role,"engineer");
+    assert.equal((await request("/api/operations/reports/access",linkedWithAdminGrant)).status,403);
+    assert.equal((await connection.query("SELECT role FROM users WHERE id=$1",[local.id])).rows[0].role,"engineer");
+    role="user";
     active=false;assert.equal((await request("/api/auth/me",linked)).status,401);
     active=true;assert.equal((await request("/api/auth/me",linked)).status,401,"A revoked local session must not revive when the central grant becomes active again");
     active = true; sub = randomUUID(); role = "admin";

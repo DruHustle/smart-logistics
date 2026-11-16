@@ -20,7 +20,9 @@ qualification remain separate from source tests and public website checks.
 Use only explicit disposable loopback `_test` databases for new identity checks;
 `npm run test:onesa` in the Node API verifies the callback/database boundary.
 
-Portal is the shared identity authority. An approved ordinary Onesa account
+Onesa Identity at `auth.onesa.eu` owns human sign-in and product grants for the
+managed pilot. Portal is the legacy issuer during migration. Validate the
+Logistics API audience and signed stable Onesa ID. An approved ordinary account
 must not acquire an admin role or workspace membership from sign-in. Preserve
 issuer/subject binding, explicit local-account linking proof, PKCE/state replay
 guards and live grant checks. Central administration requires current MFA;

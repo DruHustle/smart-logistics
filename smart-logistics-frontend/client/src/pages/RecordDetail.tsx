@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ShipmentStock } from "@/components/ShipmentStock";
 import { Link } from "wouter";
 import { ReadError, readSource, useData } from "@/contexts/DataContext";
 import { demoShipments, demoOrders, demoEvents } from "@/lib/demo-data";
@@ -167,6 +168,9 @@ function Detail({ kind, id, tracking = false }: Props) {
       ) : (
         record && (
           <>
+            {kind === "shipments" && mode === "live" && (
+              <ShipmentStock shipment={id} />
+            )}
             {tracking ? (
               <Panel
                 title="Tracking events"
@@ -190,7 +194,7 @@ function Detail({ kind, id, tracking = false }: Props) {
                         Source:{" "}
                         {mode === "demo"
                           ? "Demo event fixture"
-                          : "node.logistics_events"}{" "}
+                          : (e.source ?? "node.logistics_events")}{" "}
                         · Event #{e.id}
                       </p>
                     </article>
@@ -225,9 +229,25 @@ function Detail({ kind, id, tracking = false }: Props) {
               <Panel title="Overview">
                 <dl className="detail-grid">
                   <div>
-                    <dt>Status</dt>
+                    <dt>
+                      {shipment && mode === "live"
+                        ? "Last carrier status"
+                        : "Status"}
+                    </dt>
                     <dd>
-                      <StatusBadge value={record.status} />
+                      {shipment &&
+                      mode === "live" &&
+                      !shipment.carrierStatus ? (
+                        "No carrier update recorded"
+                      ) : (
+                        <StatusBadge
+                          value={
+                            shipment && mode === "live"
+                              ? shipment.carrierStatus!
+                              : record.status
+                          }
+                        />
+                      )}
                     </dd>
                   </div>
                   <div>

@@ -1,6 +1,6 @@
 import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import app from "../src/app";
@@ -297,7 +297,7 @@ test("provider events reduce deterministically across ordering, sparse fields, d
     [p2]: secret,
   });
   await connection.query(
-    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$2),($3,$2)",
+    "INSERT INTO logistics_connectors(provider,workspace_id,provider_accepted_at) VALUES($1,$2,now()),($3,$2,now())",
     [p, workspace, p2],
   );
   const { cookie } = await account("engineer", workspace),
@@ -623,11 +623,12 @@ test("migration upgrade preserves legacy rows; concurrent runners serialize and 
     ).rows[0];
     assert.equal(row.workspace_id, null);
     assert.equal(row.created_at.toISOString(), "2026-10-26T09:00:00.000Z");
-    assert.equal(
-      (await pool.query("SELECT count(*)::int AS count FROM schema_migrations"))
-        .rows[0].count,
-      10,
-    );
+    const expectedMigrations = (await fs.readdir("migrations"))
+      .filter(file => file.endsWith(".sql")).sort();
+    const appliedMigrations = (await pool.query("SELECT name FROM schema_migrations ORDER BY name"))
+      .rows.map(row => row.name);
+    assert.deepEqual(appliedMigrations, expectedMigrations,
+      "The upgrade must apply every current migration, including provider acceptance");
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "imsop-migration-"));
     try {
       for (const file of await fs.readdir("migrations"))
@@ -712,7 +713,7 @@ test("delivery evidence corrections and currency reports preserve original promi
     [workspace],
   );
   await connection.query(
-    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$2)",
+    "INSERT INTO logistics_connectors(provider,workspace_id,provider_accepted_at) VALUES($1,$2,now())",
     [provider, workspace],
   );
   process.env.LOGISTICS_WEBHOOK_SECRETS = JSON.stringify({
@@ -1065,4 +1066,81 @@ test("cross-workspace review and notification joins fail closed for inconsistent
   assert.equal((await request(historyPath, { action: "acknowledge", version: 0 }, cookie)).status, 404);
   const unchanged = await connection.query("SELECT version FROM review_cases WHERE id=$1", [caseId]);
   assert.equal(unchanged.rows[0].version, 0);
+});
+
+
+test("carrier connectors are not advertised or usable until provider acceptance is recorded", async () => {
+  const workspace = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Provider acceptance')", [workspace]);
+  const { cookie } = await account("engineer", workspace);
+  const pending = "pending-" + randomUUID();
+  const accepted = "accepted-" + randomUUID();
+  await connection.query(
+    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES($1,$3),($2,$3)",
+    [pending, accepted, workspace],
+  );
+  await connection.query(
+    "UPDATE logistics_connectors SET provider_accepted_at=now() WHERE provider=$1",
+    [accepted],
+  );
+
+  const providers = await request("/api/operations/shipment-providers", undefined, cookie);
+  assert.equal(providers.status, 200);
+  assert.deepEqual((await providers.json()).providers, [accepted]);
+
+  const create = async (provider: string) => fetch(base + "/api/operations/shipments", {
+    method: "POST",
+    headers: {
+      Cookie: cookie,
+      Origin: "http://localhost:5173",
+      "Content-Type": "application/json",
+      "Idempotency-Key": randomUUID(),
+    },
+    body: JSON.stringify({
+      trackingNumber: "ACCEPTANCE-" + randomUUID(),
+      origin: "Warehouse A",
+      destination: "Customer B",
+      provider,
+    }),
+  });
+  assert.equal((await create(pending)).status, 404);
+
+  const secret = "provider-acceptance-fixture-secret-at-least-32";
+  process.env.LOGISTICS_WEBHOOK_SECRETS = JSON.stringify({ [pending]: secret });
+  const event = {
+    eventId: randomUUID(),
+    eventType: "shipment.updated",
+    trackingNumber: "UNACCEPTED-" + randomUUID(),
+    status: "in_transit",
+    occurredAt: new Date().toISOString(),
+  };
+  const body = JSON.stringify(event);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = "sha256=" + createHmac("sha256", secret)
+    .update(timestamp + "." + body)
+    .digest("hex");
+  const webhook = await fetch(base + "/api/integrations/logistics/" + pending + "/events", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-imsop-timestamp": timestamp,
+      "x-imsop-signature": signature,
+    },
+    body,
+  });
+  assert.equal(webhook.status, 403);
+  const notIngested = await connection.query(
+    "SELECT 1 FROM logistics_events WHERE workspace_id=$1 AND provider=$2 AND event_id=$3",
+    [workspace, pending, event.eventId],
+  );
+  assert.equal(notIngested.rowCount, 0);
+  const acceptedCreate = await create(accepted);
+  assert.equal(acceptedCreate.status, 201, await acceptedCreate.clone().text());
+  const saved = await acceptedCreate.json();
+  const shipment = await connection.query(
+    "SELECT provider,status FROM shipments WHERE id=$1 AND workspace_id=$2",
+    [saved.id, workspace],
+  );
+  assert.equal(shipment.rows[0].provider, accepted);
+  assert.equal(shipment.rows[0].status, "pending");
 });

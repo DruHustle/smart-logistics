@@ -11,7 +11,9 @@ export const release = {
     "workspace-edge-observations-v1",
     "immutable-mail-v1",
     "node-red-package-management-v1",
+    "shipment-stock-v1",
+    "operator-shipment-creation-v1",
   ],
-  nodeSchema: "009_onesa_identity.sql",
-  supplyChainSchema: "202610270002_PurchaseReceiving",
+  nodeSchema: "011_provider_acceptance.sql",
+  supplyChainSchema: "202611140001_ShipmentStock",
 };

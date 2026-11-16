@@ -197,7 +197,7 @@ and [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/).
 
 ### Onesa administrator sign-in
 
-Apply migration `009_onesa_identity.sql` before deploying the Node API. Register
+Apply migration `011_provider_acceptance.sql` (which follows the managed-identity migrations) before deploying the Node API. External carrier connectors remain unaccepted by default; shipment-provider discovery, operator-created carrier shipments and signed carrier webhook ingestion stay blocked until a separately approved operator records `provider_accepted_at` after confirming provider acceptance. The application has no self-service route to assert this acceptance. Register
 the `logistics` client on the Portal with application URL
 `https://logistics.onesa.eu` and exact callback
 `https://logistics.onesa.eu/api/auth/onesa/callback`. Add the callback to

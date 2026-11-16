@@ -2,6 +2,7 @@ import { externalMailAvailable } from "../services/notificationDelivery";
 import { Response } from "express";
 import { connection } from "../config/db";
 import { AuthRequest } from "../middleware/auth";
+import { hasProviderWebhookSecret } from "../middleware/logisticsWebhookAuth";
 import { numericId, readBounds } from "./operationalReads";
 import { forecastConfiguration, sapConfiguration } from "../config/integrations";
 export async function reviewFeed(req: AuthRequest, res: Response) {
@@ -37,18 +38,31 @@ export async function reviewFeed(req: AuthRequest, res: Response) {
     source: "node.review_cases",
   });
 }
+export async function reviewDetail(req: AuthRequest, res: Response) {
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({error: "Invalid case ID"});
+  const {rows: [row]} = await connection.query(
+    `SELECT c.id,c.shipment_id AS "shipmentId",s.tracking_number AS "trackingNumber",c.state,c.version
+     FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id
+     WHERE c.id=$1 AND c.workspace_id=$2`, [id, req.user!.workspaceId],
+  );
+  return row ? res.json(row) : res.status(404).json({error: "Review case not found"});
+}
 export async function reviewHistory(req: AuthRequest, res: Response) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid case ID" });
   const found = await connection.query(
-    `SELECT c.id FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id
-     WHERE c.id=$1 AND c.workspace_id=$2`,
+    "SELECT c.id FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id WHERE c.id=$1 AND c.workspace_id=$2",
     [id, req.user!.workspaceId],
   );
   if (!found.rowCount)
     return res.status(404).json({ error: "Review case not found" });
   const result = await connection.query(
-    `SELECT a.id,a.actor_id AS "actorId",coalesce(u.name,'System') AS "actorName",a.action,a.note,a.occurred_at AS "occurredAt" FROM review_actions a LEFT JOIN users u ON u.id=a.actor_id WHERE a.case_id=$1 AND a.workspace_id=$2 ORDER BY a.id DESC LIMIT 100`,
+    `SELECT a.id,CASE WHEN u.id IS NULL THEN NULL ELSE a.actor_id END AS "actorId",coalesce(u.name,'System') AS "actorName",a.action,a.note,a.occurred_at AS "occurredAt"
+     FROM review_actions a
+     LEFT JOIN workspace_memberships m ON m.user_id=a.actor_id AND m.workspace_id=a.workspace_id
+     LEFT JOIN users u ON u.id=m.user_id AND NOT u.disabled
+     WHERE a.case_id=$1 AND a.workspace_id=$2 ORDER BY a.id DESC LIMIT 100`,
     [id, req.user!.workspaceId],
   );
   res.json({ items: result.rows });
@@ -62,8 +76,7 @@ export async function actOnReview(req: AuthRequest, res: Response) {
     await tx.query("BEGIN");
     const row = (
       await tx.query(
-        `SELECT c.* FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id
-         WHERE c.id=$1 AND c.workspace_id=$2 FOR UPDATE OF c`,
+        "SELECT c.* FROM review_cases c JOIN shipments s ON s.id=c.shipment_id AND s.workspace_id=c.workspace_id WHERE c.id=$1 AND c.workspace_id=$2 FOR UPDATE OF c",
         [id, req.user!.workspaceId],
       )
     ).rows[0];
@@ -156,9 +169,9 @@ export async function readNotification(req: AuthRequest, res: Response) {
 }
 export async function integrationStatus(req: AuthRequest, res: Response) {
   const items = await connection.query(
-    `SELECT c.provider,c.enabled,max(e.received_at) AS "lastReceivedAt",max(e.occurred_at) AS "lastObservedAt",count(e.id)::int AS "receiptCount"
+    `SELECT c.provider,c.enabled,c.provider_accepted_at AS "providerAcceptedAt",max(e.received_at) AS "lastReceivedAt",max(e.occurred_at) AS "lastObservedAt",count(e.id)::int AS "receiptCount"
  FROM logistics_connectors c LEFT JOIN logistics_events e ON e.workspace_id=c.workspace_id AND e.provider=c.provider
- WHERE c.workspace_id=$1 GROUP BY c.provider,c.enabled ORDER BY c.provider LIMIT 100`,
+ WHERE c.workspace_id=$1 GROUP BY c.provider,c.enabled,c.provider_accepted_at ORDER BY c.provider LIMIT 100`,
     [req.user!.workspaceId],
   );
   const delivery =
@@ -177,11 +190,9 @@ export async function integrationStatus(req: AuthRequest, res: Response) {
     },
     items: items.rows.map((item) => ({
       ...item,
-      signatureConfigured: Boolean(
-        JSON.parse(process.env.LOGISTICS_WEBHOOK_SECRETS || "{}")[
-          item.provider
-        ],
-      ),
+      providerAccepted: Boolean(item.providerAcceptedAt),
+      acceptanceStatus: item.providerAcceptedAt ? "accepted" : "pending-provider-acceptance",
+      signatureConfigured: hasProviderWebhookSecret(item.provider),
       connectivity: "not probed",
       sync: "event intake only",
     })),

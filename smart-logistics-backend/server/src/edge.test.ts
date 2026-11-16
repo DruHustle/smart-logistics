@@ -4,6 +4,7 @@ import {createHmac,randomUUID} from 'node:crypto';
 import {connection} from './config/db';
 import app from './app';
 import {imsopEdgeEvent,verifyEdgeHmac} from './routes/edgeRoutes';
+import {hasProviderWebhookSecret,providerWebhookSecret} from './middleware/logisticsWebhookAuth';
 
 const gateway='truck-gateway-1';
 const workspace='11111111-1111-4111-8111-111111111111';
@@ -70,5 +71,29 @@ test('edge ingest rejects missing signature, uncommissioned source, changed retr
   stub.mock.restore();
   if(old===undefined)delete process.env.IMSOP_EDGE_GATEWAYS;
   else process.env.IMSOP_EDGE_GATEWAYS=old;
+ }
+});
+
+test('provider readiness and webhook authentication fail closed for malformed secret values',()=>{
+ const previous=process.env.LOGISTICS_WEBHOOK_SECRETS;
+ try{
+  const valid='v'.repeat(40);
+  process.env.LOGISTICS_WEBHOOK_SECRETS=JSON.stringify({
+   carrier:valid,short:'s'.repeat(31),numeric:42,array:[valid],padded:' '+valid,multiline:valid+'\n'
+  });
+  assert.equal(providerWebhookSecret('carrier'),valid);
+  assert.equal(hasProviderWebhookSecret('carrier'),true);
+  for(const provider of ['short','numeric','array','padded','multiline','missing','toString','constructor']){
+   assert.equal(providerWebhookSecret(provider),undefined,provider);
+   assert.equal(hasProviderWebhookSecret(provider),false,provider);
+  }
+  process.env.LOGISTICS_WEBHOOK_SECRETS='not-json';
+  assert.equal(providerWebhookSecret('carrier'),undefined);
+  assert.equal(hasProviderWebhookSecret('carrier'),false);
+  process.env.LOGISTICS_WEBHOOK_SECRETS=JSON.stringify([valid]);
+  assert.equal(providerWebhookSecret('0'),undefined);
+ }finally{
+  if(previous===undefined)delete process.env.LOGISTICS_WEBHOOK_SECRETS;
+  else process.env.LOGISTICS_WEBHOOK_SECRETS=previous;
  }
 });

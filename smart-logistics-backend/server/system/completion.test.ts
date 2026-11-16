@@ -616,3 +616,118 @@ test("purchase pages and catalogs expose records beyond their first bounded page
     400,
   );
 });
+
+test("outbound stock maintains the canonical ledger under parallel grants, retries and delivery confirmation", async()=>{
+ const draft={trackingNumber:randomUUID(),origin:"Dock A",destination:"Site B"},createPath="/api/operations/shipments",createKey=randomUUID();
+ assert.equal((await call(user,createPath,"POST",draft,randomUUID())).status,403);
+ assert.equal((await call(a,createPath,"POST",{...draft,provider:"another-workspace-carrier"},randomUUID())).status,404);
+ const attempts=await Promise.all([call(a,createPath,"POST",draft,createKey),call(a,createPath,"POST",draft,createKey)]);
+ assert.deepEqual(attempts.map(r=>r.status).sort(),[200,201]);const created=await Promise.all(attempts.map(r=>r.json()));assert.equal(created[0].id,created[1].id);
+ assert.equal((await call(a,createPath,"POST",{...draft,destination:"Different"},createKey)).status,409);
+ assert.equal((await call(a,createPath,"POST",draft,randomUUID())).status,409);
+ const stock=randomUUID();
+ await db.query("INSERT INTO supply_chain.inventories(id,organization_id,warehouse_id,product_id,quantity_on_hand,quantity_reserved) VALUES($1,$2,$3,$4,8,0)",[stock,a.org,a.warehouse,a.product]);
+ const path="/supply-chain/api/v1/shipment-stock/"+created[0].id,body={action:"reserve",inventoryId:stock,quantity:5,observation:"isolated dock observation"},key=randomUUID();
+ const balance=async()=>{const r=await db.query("SELECT quantity_on_hand,quantity_reserved,quantity_available FROM supply_chain.inventories WHERE id=$1",[stock]);return Object.values(r.rows[0]);};
+ assert.equal((await call(user,path,"POST",body,randomUUID())).status,403);
+ assert.equal((await call(b,path,"POST",body,randomUUID())).status,404);
+ assert.equal((await call(a,path,"POST",{...body,quantity:9},randomUUID())).status,409);
+ const replies=await Promise.all([call(a,path,"POST",body,key),call(a,path,"POST",body,key)]);
+ for(const r of replies)assert.equal(r.status,200,await r.clone().text());
+ const saved=await Promise.all(replies.map(r=>r.json()));assert.equal(saved[0].allocationId,saved[1].allocationId);assert.deepEqual(saved.map(x=>x.duplicate).sort(),[false,true]);
+ assert.deepEqual(await balance(),[8,5,3]);
+ assert.equal((await call(a,path,"POST",{...body,quantity:4},key)).status,409);
+ assert.equal((await call(a,path,"POST",{...body,action:"deliver"},randomUUID())).status,409);
+ const dispatch={...body,action:"dispatch",observation:"dock handover reference 34"};
+ assert.equal((await call(a,path,"POST",dispatch,randomUUID())).status,200);
+ assert.deepEqual(await balance(),[3,0,3]);
+ assert.equal((await call(a,path,"POST",dispatch,randomUUID())).status,409);
+ const delivery={...body,action:"deliver",observation:"recipient test evidence ABC-34"};
+ assert.equal((await call(a,path,"POST",delivery,randomUUID())).status,200);
+ assert.deepEqual(await balance(),[3,0,3]);
+ const record=await (await call(a,path)).json();assert.equal(record.allocations[0].state,"delivered");assert.equal(record.operationalStatus,"Delivered");
+ const status=await (await call(a,path+"/status")).json();assert.equal(status.operationalStatus,"Delivered");
+ const carrier=await (await call(a,"/api/operations/shipments/"+created[0].id)).json();assert.equal(carrier.carrierStatus,null);
+ const events=await db.query("SELECT action,observation FROM supply_chain.shipment_stock_events WHERE allocation_id=$1",[saved[0].allocationId]);
+ assert.equal(events.rowCount,3);assert(events.rows.some(e=>e.observation===delivery.observation));
+});
+
+test("mismatched review ownership cannot surface shipment identities in feeds or notifications", async () => {
+  // Legacy/recovery data can contain an FK-valid case that points to a shipment
+  // belonging to another workspace. Listing and notification queries must not
+  // trust only the case/action workspace while joining to private shipment data.
+  const tracking = "FOREIGN-REVIEW-" + randomUUID();
+  const foreignShipment = (
+    await db.query(
+      "INSERT INTO shipments(workspace_id,provider,tracking_number,origin,destination,status) VALUES($1,'isolated-review',$2,'Foreign origin','Foreign destination','exception') RETURNING id",
+      [b.workspace, tracking],
+    )
+  ).rows[0].id;
+  const malformedCase = (
+    await db.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id) VALUES($1,$2) RETURNING id",
+      [a.workspace, foreignShipment],
+    )
+  ).rows[0].id;
+  const foreignCase = (
+    await db.query(
+      "INSERT INTO review_cases(workspace_id,shipment_id) VALUES($1,$2) RETURNING id",
+      [b.workspace, foreignShipment],
+    )
+  ).rows[0].id;
+  const malformedAction = (
+    await db.query(
+      "INSERT INTO review_actions(workspace_id,case_id,action) VALUES($1,$2,'opened') RETURNING id",
+      [a.workspace, malformedCase],
+    )
+  ).rows[0].id;
+  const crossCaseAction = (
+    await db.query(
+      "INSERT INTO review_actions(workspace_id,case_id,action) VALUES($1,$2,'opened') RETURNING id",
+      [a.workspace, foreignCase],
+    )
+  ).rows[0].id;
+
+  const feedResponse = await call(a, "/api/operations/reviews?limit=50");
+  assert.equal(feedResponse.status, 200);
+  const feed = await feedResponse.json();
+  assert(!feed.items.some((item: any) => item.id === malformedCase));
+  assert(!JSON.stringify(feed).includes(tracking));
+  assert.equal((await call(a, "/api/operations/reviews/" + malformedCase)).status, 404);
+
+  // A legacy case with a mismatched shipment workspace must not expose its
+  // action history or permit state changes, assignment or new notifications.
+  const history = await call(a, "/api/operations/reviews/" + malformedCase + "/actions");
+  assert.equal(history.status, 404);
+  const beforeMutation = (
+    await db.query("SELECT state,version,assignee_id FROM review_cases WHERE id=$1", [malformedCase])
+  ).rows[0];
+  const actionCountBefore = (
+    await db.query("SELECT count(*)::int AS count FROM review_actions WHERE case_id=$1", [malformedCase])
+  ).rows[0].count;
+  const rejectedMutation = await call(
+    a,
+    "/api/operations/reviews/" + malformedCase + "/actions",
+    "POST",
+    { action: "note", note: "Must not affect foreign shipment", version: 0 },
+  );
+  assert.equal(rejectedMutation.status, 404);
+  const afterMutation = (
+    await db.query("SELECT state,version,assignee_id FROM review_cases WHERE id=$1", [malformedCase])
+  ).rows[0];
+  const actionCountAfter = (
+    await db.query("SELECT count(*)::int AS count FROM review_actions WHERE case_id=$1", [malformedCase])
+  ).rows[0].count;
+  assert.deepEqual(afterMutation, beforeMutation);
+  assert.equal(actionCountAfter, actionCountBefore);
+
+  const notificationsResponse = await call(a, "/api/operations/notifications");
+  assert.equal(notificationsResponse.status, 200);
+  const notifications = await notificationsResponse.json();
+  assert(!notifications.items.some((item: any) => [malformedAction, crossCaseAction].includes(item.id)));
+  assert(!JSON.stringify(notifications).includes(tracking));
+  for (const id of [malformedAction, crossCaseAction]) {
+    const response = await call(a, "/api/operations/notifications/" + id + "/read", "POST", {});
+    assert.equal(response.status, 404);
+  }
+});

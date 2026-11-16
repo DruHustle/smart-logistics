@@ -357,7 +357,7 @@ test("direct service session boundary rejects disabled, role-changed and expired
 test("signed intake through gateway seeds a durable review workflow for real browser qualification", async () => {
   const user = await createAccount("admin");
   await db.query(
-    "INSERT INTO logistics_connectors(provider,workspace_id) VALUES('isolated-carrier',$1) ON CONFLICT(provider) DO UPDATE SET workspace_id=EXCLUDED.workspace_id",
+    "INSERT INTO logistics_connectors(provider,workspace_id,provider_accepted_at) VALUES('isolated-carrier',$1,now()) ON CONFLICT(provider) DO UPDATE SET workspace_id=EXCLUDED.workspace_id,provider_accepted_at=EXCLUDED.provider_accepted_at",
     [user.workspaceId],
   );
   const productId=randomUUID(),warehouseId=randomUUID();

@@ -1,0 +1,7 @@
+# SmartLogistics operator app
+
+Use Node 24 and run `npm ci`, `npm run typecheck`, and `npm test`. Run `npm run android` with the Android SDK, or `npm run ios` on a Mac with Xcode and CocoaPods. Expo generates each native project from the pinned package lock and app configuration. The Installed operator clients workflow packages a standalone qualification APK and installs the Release simulator app. Physical iPhone distribution requires the organization's signing team and provisioning profile.
+
+Register the public client with Auth0 for Onesa Identity at `https://auth.onesa.eu/`, enable S256 and register the exact callback `eu.onesa.logistics://signin/callback`. Set `ONESA_IDENTITY_NATIVE_CLIENT_ID` on the product API alongside the existing managed identity settings. Allow this client for the product resource in Identity. The API returns its public client registration to the app at `https://logistics.onesa.eu/api/auth/onesa/native/config`. Existing, mapped product accounts with local access use the same records and roles. New assignments and account linking use the existing managed pilot.
+
+Install the build, open `eu.onesa.logistics://record/RECORD`, choose **Sign in with Onesa**, and confirm the operating system returns to the requested record. Replace RECORD with an assigned shipment exception ID. Repeat with an existing browser session. Resolve the exception with its outcome, refresh and verify its history from the web client. Verify expiry and sign-out. Supply a separate signed build and the physical site evidence for release.

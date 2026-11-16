@@ -81,8 +81,10 @@ as a live truck position.
 
 The Python spool retains an event after a temporary API outage. Each send uses
 a **new timestamp and HMAC signature**, preserving the original event ID and
-observation time. Permanent application rejections are quarantined locally, not
-deleted. Back up the SQLite state and retain recovery evidence. The queue cannot
+observation time. HTTP redirects are not followed: a 301/302 can turn a POST into
+a GET, so only a direct 200/202 from the configured API origin acknowledges
+delivery. Redirects are retried without deleting the queued event. Permanent
+application rejections are quarantined locally, not deleted. Back up the SQLite state and retain recovery evidence. The queue cannot
 prove delivery until the API accepts it. Python records local rejected-source
 and authentication evidence but does not assert cybersecurity compliance.
 

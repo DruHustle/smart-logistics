@@ -236,6 +236,24 @@ export const recordDetail =
           and(eq(table.id, id), eq(table.workspaceId, req.user!.workspaceId!)),
         )
         .limit(1);
+      if (item && kind === "shipments") {
+        const row = item as typeof shipments.$inferSelect;
+        let carrierStatus: string | null = null;
+        const eventId = (row.projectionProvenance as { status?: number } | null)?.status;
+        if (Number.isInteger(eventId)) {
+          const events = await db
+            .select({ eventId: logisticsEvents.eventId })
+            .from(logisticsEvents)
+            .where(and(
+              eq(logisticsEvents.id, eventId!),
+              eq(logisticsEvents.workspaceId, req.user!.workspaceId!),
+            ))
+            .limit(1);
+          if (events[0]?.eventId && !events[0].eventId.startsWith("operator-create:"))
+            carrierStatus = row.status;
+        }
+        return res.json({ ...row, carrierStatus });
+      }
       return item
         ? res.json(item)
         : res.status(404).json({ error: "Record not found" });
@@ -326,6 +344,7 @@ export async function shipmentEvents(req: AuthRequest, res: Response) {
         };
         return {
           ...item,
+          ...(typeof event?.operatorId === "number" ? { source: "workspace operator" } : {}),
           position,
           status:
             typeof event?.status === "string"

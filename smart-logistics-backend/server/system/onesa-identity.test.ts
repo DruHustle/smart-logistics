@@ -133,12 +133,15 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
   claims.active = true;
   const localEmail = randomUUID() + "@example.test",
     password = "Local-account-proof-2026";
+  const linkedWorkspace = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Linked analyst fixture')", [linkedWorkspace]);
   const {
     rows: [local],
   } = await connection.query(
-    "INSERT INTO users(email,name,password,role) VALUES($1,'Local',$2,'analyst') RETURNING id",
-    [localEmail, await hashPassword(password)],
+    "INSERT INTO users(email,name,password,role,active_workspace_id) VALUES($1,'Local',$2,'analyst',$3) RETURNING id",
+    [localEmail, await hashPassword(password), linkedWorkspace],
   );
+  await connection.query("INSERT INTO workspace_memberships(user_id,workspace_id) VALUES($1,$2)", [local.id, linkedWorkspace]);
   claims = { ...claims, sub: randomUUID(), email: localEmail };
   assert.match(
     (await callback(await start())).headers.get("location")!,
@@ -164,6 +167,7 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
     })
   ).json();
   assert.equal(localView.id, local.id);
-  assert.equal(localView.role, "admin", "The live MFA Portal administrator has effective administrative access");
+  assert.equal(localView.role, "analyst", "Federation must preserve the linked account's locally assigned role even when the live Portal grant is an MFA administrator");
+  assert.equal((await http(root + "/api/operations/shipment-providers", { headers: { Origin: origin, Cookie: linkedCookie } })).status, 403, "A central administrator claim must not elevate the linked Logistics analyst to an engineer or administrator");
   assert.equal((await connection.query("SELECT role FROM users WHERE id=$1", [local.id])).rows[0].role, "analyst", "Federation must preserve the linked account's stored local role");
 });

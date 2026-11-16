@@ -22,11 +22,12 @@ type SessionUser = Pick<
 export async function createSession(
   user: SessionUser,
   encryptedOnesaToken: string | null = null,
+  issuer: string | null = null,
 ) {
   const sid = randomUUID();
   await connection.query(
-    `INSERT INTO auth_sessions(id,user_id,workspace_id,version,role,onesa_token,expires_at)
- VALUES($1,$2,$3,$4,$5,$6,now()+interval '15 minutes')`,
+    `INSERT INTO auth_sessions(id,user_id,workspace_id,version,role,onesa_token,onesa_token_issuer,expires_at)
+ VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '15 minutes')`,
     [
       sid,
       user.id,
@@ -34,6 +35,7 @@ export async function createSession(
       user.sessionVersion,
       user.role,
       encryptedOnesaToken,
+      issuer,
     ],
   );
   return jwt.sign({ id: user.id, sid }, getJwtSecret(), {

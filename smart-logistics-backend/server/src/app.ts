@@ -111,10 +111,10 @@ app.get("/health", (_req, res) => {
 app.get("/ready", async (_req, res) => {
   try {
     const ledger = await db.execute(
-      sql`SELECT name FROM schema_migrations WHERE name IN ('007_immutable_mail.sql', '008_node_red_package_management.sql', ${release.nodeSchema}) AND checksum IS NOT NULL`,
+      sql`SELECT name FROM schema_migrations WHERE name IN ('007_immutable_mail.sql', '008_node_red_package_management.sql', '009_onesa_identity.sql', '010_session_token_issuer.sql', ${release.nodeSchema}) AND checksum IS NOT NULL`,
     );
     // Every runtime dependency must have a completed migration.
-    if (ledger.rowCount !== 3)
+    if (ledger.rowCount !== 5)
       return res.status(503).json({ status: "schema_not_ready", ...release });
     res.json({ status: "ready", ...release });
   } catch {
