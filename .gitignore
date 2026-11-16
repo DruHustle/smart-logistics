@@ -5,3 +5,8 @@
 /local-tools/deployment-evidence/
 /local-tools/release-verification/
 /local-tools/migrations/
+
+# Downloaded toolchains and package-manager caches remain local-only.
+/local-tools/corepack/
+/local-tools/pnpm-store/
+/local-tools/runtimes/
