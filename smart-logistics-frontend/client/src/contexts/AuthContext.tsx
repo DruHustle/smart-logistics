@@ -6,6 +6,7 @@ import {
   ReactNode,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import { User, AuthResponse } from "@/lib/auth-types";
 import { AuthServiceFactory } from "@/lib/auth-factory";
@@ -53,6 +54,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Async reads and profile writes may only hydrate the session that started them.
+  const sessionGeneration = useRef(0);
 
   const getSvc = useCallback(
     (email?: string) => AuthServiceFactory.getService(email),
@@ -61,25 +64,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let isMounted = true;
+    const generation = sessionGeneration.current;
     getSvc()
       .getCurrentUser()
       .then(r => {
-        if (isMounted && r.success) setUser(r.user || null);
+        if (isMounted && generation === sessionGeneration.current && r.success)
+          setUser(r.user || null);
       })
       .catch(() => {
-        if (isMounted) setUser(null);
+        if (isMounted && generation === sessionGeneration.current)
+          setUser(null);
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
       });
     return () => {
       isMounted = false;
+      sessionGeneration.current++;
     };
   }, [getSvc]);
 
   useEffect(
     () =>
       subscribeAuthChanges(() => {
+        sessionGeneration.current++;
         clearSensitiveState(user);
         setUser(null);
         if (user)
@@ -92,8 +100,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const expire = () => {
-      if (!user || safeLocalStorage.getItem("imsop_token")?.startsWith("mock_"))
-        return;
+      if (safeLocalStorage.getItem("imsop_token")?.startsWith("mock_")) return;
+      sessionGeneration.current++;
+      if (!user) return;
       safeSessionStorage.setItem("imsop:return-to", window.location.hash);
       safeSessionStorage.setItem("imsop:session-expired", "true");
       clearSensitiveState(user, true);
@@ -105,8 +114,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   const handleAuthAction = useCallback(
-    async (action: () => Promise<AuthResponse>) => {
+    async (
+      action: () => Promise<AuthResponse>,
+      startsSession = false
+    ): Promise<AuthResponse> => {
+      const generation = startsSession
+        ? ++sessionGeneration.current
+        : sessionGeneration.current;
       const result = await action();
+      if (generation !== sessionGeneration.current)
+        return {
+          success: false,
+          error: "Your session changed. Please try again.",
+        };
       if (result.success && result.user) {
         if (
           user &&
@@ -114,6 +134,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         )
           clearSensitiveState(user);
         setUser(result.user);
+      }
+      if (result.success && startsSession) {
+        setIsLoading(false);
+        publishAuthChange();
       }
       return result;
     },
@@ -131,15 +155,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             e,
             p
           );
-          if (result.success) publishAuthChange();
           if (mode === "live" && result.success && result.user)
             safeLocalStorage.setItem(
               `imsop:mode:${result.user.id}:${result.user.email}:account`,
               "live"
             );
           return result;
-        }),
+        }, true),
       logout: async () => {
+        sessionGeneration.current++;
         const service = getSvc();
         clearSensitiveState(user, true);
         setUser(null);
@@ -153,16 +177,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       },
       register: (e: string, p: string, n: string) =>
-        handleAuthAction(async () => {
-          const result = await getSvc(e).register(e, p, n);
-          if (result.success) publishAuthChange();
-          return result;
-        }),
+        handleAuthAction(() => getSvc(e).register(e, p, n), true),
       requestPasswordReset: (e: string) =>
         apiAuthService.requestPasswordReset(e),
       resetPassword: async (t: string, p: string) => {
+        const generation = sessionGeneration.current;
         const result = await apiAuthService.resetPassword(t, p);
-        if (result.success) {
+        if (result.success && generation === sessionGeneration.current) {
+          sessionGeneration.current++;
           publishAuthChange();
           clearSensitiveState(user, true);
           safeLocalStorage.removeItem("imsop_token");
@@ -183,9 +205,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           : Promise.resolve({ success: false, error: "Not authenticated" }),
       changePassword: async (c: string, n: string) => {
         if (!user) return { success: false, error: "Not authenticated" };
+        const generation = sessionGeneration.current;
         const service = getSvc(),
           result = await service.changePassword(user.id, c, n);
-        if (result.success && service === apiAuthService) {
+        if (
+          result.success &&
+          service === apiAuthService &&
+          generation === sessionGeneration.current
+        ) {
+          sessionGeneration.current++;
           publishAuthChange();
           clearSensitiveState(user, true);
           setUser(null);
