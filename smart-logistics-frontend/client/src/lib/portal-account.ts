@@ -5,7 +5,7 @@ export const hostedWorkspace = !["localhost", "127.0.0.1", "[::1]"].includes(
 );
 export const portalSignIn = "https://portal.onesa.eu/admin";
 export function identityRegistration(audience: "user" | "admin") {
-  return "https://auth.onesa.eu/register?audience=" + audience + "&product=logistics&platform=web";
+  return "https://account.onesa.eu/register?audience=" + audience + "&product=logistics&platform=web";
 }
 export const portalSecurity = "https://portal.onesa.eu/account/security";
 
