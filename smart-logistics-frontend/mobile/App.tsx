@@ -51,6 +51,20 @@ export default function App() {
     }
     safeError(e);
   }
+  async function enroll(audience: "user" | "admin") {
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    try {
+      const url = await register(destination, audience);
+      if (url) await receive(url);
+    } catch (error) {
+      fail(error);
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
   const resumingRegistration = useRef(false);
   async function receive(url: string) {
     try {
@@ -202,19 +216,8 @@ export default function App() {
                 onPress={login}
                 disabled={busy}
               />
-              <Button
-                title="Create an Onesa account"
-                disabled={busy}
-                onPress={async () => {
-                  if (submitting.current) return;
-                  submitting.current = true; setBusy(true);
-                  try {
-                    const url = await register(destination);
-                    if (url) await receive(url);
-                  } catch (e) { fail(e); }
-                  finally { submitting.current = false; setBusy(false); }
-                }}
-              />
+              <Button title="Create an Onesa account" disabled={busy} onPress={() => void enroll("user")} />
+              <Button title="Request administrator access" disabled={busy} onPress={() => void enroll("admin")} />
             </View>
           ) : (
             <View style={styles.section}>

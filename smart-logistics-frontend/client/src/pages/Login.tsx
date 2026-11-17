@@ -3,7 +3,7 @@ import { useHashQuery } from "@/lib/hash-location";
 import { safeSessionStorage } from "@/lib/storage";
 import {
   hostedWorkspace,
-  portalRegistration,
+  identityRegistration,
   rememberRegistration,
   resumeRegistration,
   portalSecurity,
@@ -310,12 +310,19 @@ export default function Login() {
               onClick={() => {
                 if (!hostedWorkspace) return navigate("/register");
                 rememberRegistration();
-                window.location.assign(portalRegistration);
+                window.location.assign(identityRegistration("user"));
               }}
               className="text-primary hover:underline font-semibold"
             >
               Sign Up
             </button>
+            {hostedWorkspace && (
+              <p className="mt-2">
+                <a href={identityRegistration("admin")} onClick={rememberRegistration} className="text-primary hover:underline">
+                  Request administrator access
+                </a>
+              </p>
+            )}
           </div>
 
           <details

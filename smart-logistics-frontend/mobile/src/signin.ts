@@ -108,12 +108,12 @@ export async function finish(url: string) {
 const registrationKey = "operator.registration.pending";
 export const registrationReturn = "eu.onesa.logistics://signin/registered";
 
-export async function register(destination: string | null) {
+export async function register(destination: string | null, audience: "user" | "admin") {
   if (Platform.OS !== "ios" && Platform.OS !== "android") throw Error("Unsupported registration platform.");
   await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
-  const url = "https://auth.onesa.eu/register?audience=user&product=logistics&platform=" + Platform.OS;
+  const url = "https://auth.onesa.eu/register?audience=" + audience + "&product=logistics&platform=" + Platform.OS;
   const result = await openAuthSessionAsync(url, registrationReturn);
   if (result.type === "success" && result.url === registrationReturn) return result.url;
   await SecureStore.deleteItemAsync(registrationKey);
