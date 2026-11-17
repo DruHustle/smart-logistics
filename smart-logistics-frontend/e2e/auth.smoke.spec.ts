@@ -109,9 +109,9 @@ test("hosted login offers Portal account access during an issuer outage", async 
 
   await page.goto(hosted + "/#/login");
   await page.getByRole("button", { name: "Sign Up", exact: true }).click();
-  await expect(page).toHaveURL("https://portal.onesa.eu/admin?entry=register");
+  await expect(page).toHaveURL("https://portal.onesa.eu/access/register?audience=user");
   for (const [route, destination] of [
-    ["/register", "/admin?entry=register"],
+    ["/register", "/access/register?audience=user"],
     ["/forgot-password", "/account/security"],
   ]) {
     await page.goto(hosted + "/#" + route);

@@ -190,6 +190,10 @@ export default function App() {
                 onPress={login}
                 disabled={busy}
               />
+              <Button
+                title="Create an Onesa account"
+                onPress={() => { void Linking.openURL("https://auth.onesa.eu/register?audience=user").catch(fail); }}
+              />
             </View>
           ) : (
             <View style={styles.section}>
