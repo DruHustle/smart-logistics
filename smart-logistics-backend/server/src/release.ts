@@ -14,6 +14,6 @@ export const release = {
     "shipment-stock-v1",
     "operator-shipment-creation-v1",
   ],
-  nodeSchema: "011_provider_acceptance.sql",
+  nodeSchema: "012_shared_registration_roles.sql",
   supplyChainSchema: "202611140001_ShipmentStock",
 };

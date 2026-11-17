@@ -3,7 +3,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch, Router as WouterRouter, Redirect } from "wouter";
 import {
   hostedWorkspace,
-  portalRegistration,
+  identityRegistration,
+  rememberRegistration,
   portalSecurity,
 } from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
@@ -52,10 +53,11 @@ function LegacyRedirect({ href }: { href: string }) {
   return <Redirect to={href + (q ? "?" + q : "")} replace />;
 }
 function PortalAccountRedirect({ register }: { register: boolean }) {
-  const url = register ? portalRegistration : portalSecurity;
+  const url = register ? identityRegistration("user") : portalSecurity;
   useEffect(() => {
+    if (register) rememberRegistration();
     window.location.replace(url);
-  }, [url]);
+  }, [url, register]);
   return <a href={url}>Continue to your Onesa account</a>;
 }
 

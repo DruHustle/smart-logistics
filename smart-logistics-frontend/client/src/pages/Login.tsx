@@ -3,7 +3,9 @@ import { useHashQuery } from "@/lib/hash-location";
 import { safeSessionStorage } from "@/lib/storage";
 import {
   hostedWorkspace,
-  portalRegistration,
+  identityRegistration,
+  rememberRegistration,
+  resumeRegistration,
   portalSecurity,
   portalSignIn,
 } from "@/lib/portal-account";
@@ -82,6 +84,10 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (onesaEnabled && resumeRegistration()) void signInWithOnesa();
+  }, [onesaEnabled]);
 
   async function signInWithOnesa(link = false) {
     setIsLoading(true);
@@ -301,15 +307,22 @@ export default function Login() {
               Don't have an account?{" "}
             </span>
             <button
-              onClick={() =>
-                hostedWorkspace
-                  ? window.location.assign(portalRegistration)
-                  : navigate("/register")
-              }
+              onClick={() => {
+                if (!hostedWorkspace) return navigate("/register");
+                rememberRegistration();
+                window.location.assign(identityRegistration("user"));
+              }}
               className="text-primary hover:underline font-semibold"
             >
               Sign Up
             </button>
+            {hostedWorkspace && (
+              <p className="mt-2">
+                <a href={identityRegistration("admin")} onClick={rememberRegistration} className="text-primary hover:underline">
+                  Request administrator access
+                </a>
+              </p>
+            )}
           </div>
 
           <details
