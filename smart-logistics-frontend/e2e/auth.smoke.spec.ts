@@ -94,7 +94,7 @@ test("hosted login offers Portal account access during an issuer outage", async 
     );
     await route.fulfill({ response: asset });
   });
-  await page.route("https://auth.onesa.eu/**", route => route.fulfill({contentType:"text/html", body:"<title>Identity</title>"}));
+  await page.route("https://account.onesa.eu/**", route => route.fulfill({contentType:"text/html", body:"<title>Identity</title>"}));
   await page.route("https://portal.onesa.eu/**", route =>
     route.fulfill({ contentType: "text/html", body: "<title>Portal</title>" })
   );
@@ -110,9 +110,9 @@ test("hosted login offers Portal account access during an issuer outage", async 
 
   await page.goto(hosted + "/#/login");
   await page.getByRole("button", { name: "Sign Up", exact: true }).click();
-  await expect(page).toHaveURL("https://auth.onesa.eu/register?audience=user&product=logistics&platform=web");
+  await expect(page).toHaveURL("https://account.onesa.eu/register?audience=user&product=logistics&platform=web");
   for (const [route, destination] of [
-    ["/register", "https://auth.onesa.eu/register?audience=user&product=logistics&platform=web"],
+    ["/register", "https://account.onesa.eu/register?audience=user&product=logistics&platform=web"],
     ["/forgot-password", "https://portal.onesa.eu/account/security"],
   ]) {
     await page.goto(hosted + "/#" + route);
@@ -134,14 +134,14 @@ for (const audience of ["user", "admin"]) {
       const asset=await page.request.get(new URL(url.pathname+url.search,baseURL).href);
       return route.fulfill({response:asset});
     });
-    await page.route("https://auth.onesa.eu/**",route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted+'/#/login?registration=complete">Back to Logistics</a>'}));
+    await page.route("https://account.onesa.eu/**",route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted+'/#/login?registration=complete">Back to Logistics</a>'}));
     await page.route("https://identity.example.test/authorize",route=>route.fulfill({body:"Onesa sign-in"}));
     await page.goto(hosted+"/#/login?returnTo="+encodeURIComponent("#/supply-chain/shipments/123/tracking"));
     const entry = audience === "admin"
       ? page.getByRole("link", {name: "Request administrator access"})
       : page.getByRole("button", {name: "Sign Up", exact: true});
     await entry.click();
-    await expect(page).toHaveURL("https://auth.onesa.eu/register?audience="+audience+"&product=logistics&platform=web");
+    await expect(page).toHaveURL("https://account.onesa.eu/register?audience="+audience+"&product=logistics&platform=web");
     await page.getByRole("link",{name:"Back to Logistics"}).click();
     await expect(page).toHaveURL("https://identity.example.test/authorize");
   });
