@@ -18,6 +18,42 @@ import { rateLimit } from "../middleware/rateLimit";
 import { exchangeNativeCode, nativeClient, nativeRedirect, nativeRequest } from "../services/nativeAuthorization";
 import { accessIdentity, tokenProfile } from "../services/managedOnesa";
 
+type VerifiedAccount = {
+  iss: string; sub: string; email: string; name: string;
+  onesa_product_roles: {logistics: "user" | "admin"};
+  issuedAt?: number;
+};
+
+async function registrationAccount(identity: VerifiedAccount) {
+  const {iss, sub, email, name, issuedAt} = identity;
+  const role = identity.onesa_product_roles.logistics;
+  // Conflicting local addresses require the existing proof-of-ownership flow.
+  // A concurrent first sign-in can only create one row for this issuer and subject.
+  await connection.query(
+    `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role,identity_managed_role,identity_role_issued_at)
+     SELECT $1,$2,$3,$4,'!onesa-managed',$5,$6,$7
+     WHERE NOT EXISTS(SELECT 1 FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2) ON CONFLICT DO NOTHING`,
+    [iss, sub, email.toLowerCase(), name, role, issuedAt === undefined ? null : role, issuedAt ?? null],
+  );
+  if (issuedAt !== undefined) {
+    // An earlier signed token cannot reverse a newer decision. At the same
+    // issuance second a downgrade wins. Local assignments have no managed role.
+    await connection.query(
+      `UPDATE users SET role=$3,identity_managed_role=$3,identity_role_issued_at=$4
+       WHERE onesa_issuer=$1 AND onesa_subject=$2 AND NOT disabled AND identity_managed_role IS NOT NULL
+       AND (identity_role_issued_at < $4 OR (identity_role_issued_at=$4 AND role='admin' AND $3='user'))`,
+      [iss, sub, role, issuedAt],
+    );
+  }
+  const {rows: [user]} = await connection.query(
+    `SELECT id,role,active_workspace_id AS "activeWorkspaceId",session_version AS "sessionVersion",
+            disabled,identity_managed_role AS "identityManagedRole"
+     FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2`, [iss, sub],
+  );
+  if (user?.identityManagedRole && (issuedAt === undefined || user.identityManagedRole !== role)) throw new InactiveIdentity();
+  return user;
+}
+
 const router = Router();
 router.get("/native/config", (_req, res) => {
   const config = identityConfig();
@@ -35,13 +71,9 @@ router.post("/native/exchange", rateLimit(15 * 60_000, 15), async (req, res) => 
     const tokens = await exchangeNativeCode(config.issuer, client, input.data);
     if (!tokens) return res.sendStatus(401);
     const identity = accessIdentity(config.issuer, client, tokens.access_token, config.managed);
-    tokenProfile(config.issuer, client, tokens.id_token, input.data.nonce, identity.providerSubject, config.managed);
-    const {rows: [user]} = await connection.query(
-      `SELECT id,role,active_workspace_id AS "activeWorkspaceId",session_version AS "sessionVersion"
-       FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2 AND NOT disabled`,
-      [identity.iss, identity.sub],
-    );
-    if (!user || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
+    const profile = tokenProfile(config.issuer, client, tokens.id_token, input.data.nonce, identity.providerSubject, config.managed);
+    const user = await registrationAccount({...identity, ...profile});
+    if (!user || user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin"))
       return res.sendStatus(403);
     const grant = JSON.stringify({nativeClient: client, token: tokens.access_token});
     return res.json({session: await createSession(user, sealToken(grant), config.issuer)});
@@ -160,24 +192,7 @@ router.get("/callback", async (req, res) => {
       );
       if (!updated.rowCount) return retry("link");
     }
-    // Existing subjects authenticate by issuer and subject even if their central email changes.
-    // Email collisions with local accounts require explicit proof of both accounts.
-    const values = [identity.iss, identity.sub];
-    const lookup = `SELECT id,role,active_workspace_id AS "activeWorkspaceId",session_version AS "sessionVersion",disabled
-                    FROM users WHERE onesa_issuer=$1 AND onesa_subject=$2`;
-    let {
-      rows: [user],
-    } = await connection.query(lookup, values);
-    if (!user) {
-      await connection.query(
-        `INSERT INTO users(onesa_issuer,onesa_subject,email,name,password,role) VALUES($1,$2,$3,$4,'!onesa-managed',$5)
-         ON CONFLICT DO NOTHING`,
-        [...values, email, identity.name, config.managed ? 'user' : identity.onesa_product_roles.logistics],
-      );
-      ({
-        rows: [user],
-      } = await connection.query(lookup, values));
-    }
+    const user = await registrationAccount(identity);
     if (!user) return retry("link");
     if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied");
     res.cookie(

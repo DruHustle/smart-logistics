@@ -43,15 +43,14 @@ export function verifyToken(token:string,issuer:string,audience:string,scope:Key
 export function accessIdentity(issuer:string,client:string,token:string,scope:Keys) {
   const p=verifyToken(token,issuer,scope.audience,scope);
   const stable=z.uuid().safeParse(p[claim+"user_id"]);
-  const products=z.array(z.string()).safeParse(p[claim+"products"]);
-  const roles=z.array(z.string()).safeParse(p[claim+"roles"]);
-  if(!stable.success || !products.success || !products.data.includes("logistics") || !roles.success ||
-     !roles.data.some(role=>["user","admin"].includes(role)) || p.exp!-p.iat!>300 ||
+  const products=z.tuple([z.literal("logistics")]).safeParse(p[claim+"products"]);
+  const roles=z.tuple([z.enum(["user","admin"])]).safeParse(p[claim+"roles"]);
+  if(!stable.success || !products.success || !roles.success || p.exp!-p.iat!>300 ||
      p.azp!==undefined && p.azp!==client)throw new InactiveIdentity();
-  const admin=roles.data.includes("admin");
+  const admin=roles.data[0]==="admin";
   const mfa=p[claim+"mfa_time"],now=Math.floor(Date.now()/1000);
-  if(admin && (!Number.isSafeInteger(mfa) || mfa>now || now-mfa>=300))throw new InactiveIdentity();
-  return {iss:"https://portal.onesa.eu/api/v1/identity",sub:stable.data,providerSubject:p.sub!,
+  if(admin && (!Number.isSafeInteger(mfa) || mfa>p.iat! || mfa>now || now-mfa>=300))throw new InactiveIdentity();
+  return {iss:"https://portal.onesa.eu/api/v1/identity",sub:stable.data,providerSubject:p.sub!,issuedAt:p.iat!,
     onesa_product_roles:{logistics:admin ? "admin" as const : "user" as const}};
 }
 
