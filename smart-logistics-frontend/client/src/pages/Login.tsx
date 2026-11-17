@@ -4,6 +4,8 @@ import { safeSessionStorage } from "@/lib/storage";
 import {
   hostedWorkspace,
   portalRegistration,
+  rememberRegistration,
+  resumeRegistration,
   portalSecurity,
   portalSignIn,
 } from "@/lib/portal-account";
@@ -82,6 +84,10 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (onesaEnabled && resumeRegistration()) void signInWithOnesa();
+  }, [onesaEnabled]);
 
   async function signInWithOnesa(link = false) {
     setIsLoading(true);
@@ -301,11 +307,11 @@ export default function Login() {
               Don't have an account?{" "}
             </span>
             <button
-              onClick={() =>
-                hostedWorkspace
-                  ? window.location.assign(portalRegistration)
-                  : navigate("/register")
-              }
+              onClick={() => {
+                if (!hostedWorkspace) return navigate("/register");
+                rememberRegistration();
+                window.location.assign(portalRegistration);
+              }}
               className="text-primary hover:underline font-semibold"
             >
               Sign Up

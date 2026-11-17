@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { finish, start } from "./src/signin";
+import { finish, start, register, registeredDestination, registrationReturn } from "./src/signin";
 import { title, queue, redirect } from "./src/config";
 import {
   actionLabel,
@@ -51,9 +51,21 @@ export default function App() {
     }
     safeError(e);
   }
+  const resumingRegistration = useRef(false);
   async function receive(url: string) {
     try {
-      if (url.startsWith(redirect + "?")) {
+      if (url === registrationReturn) {
+        if (resumingRegistration.current) return;
+        resumingRegistration.current = true;
+        try {
+          const requested = await registeredDestination();
+          if (requested === undefined) return;
+          const target = requested && validKey(requested) ? requested : null;
+          setDestination(target);
+          const callback = await start(target);
+          if (callback) await receive(callback);
+        } finally { resumingRegistration.current = false; }
+      } else if (url.startsWith(redirect + "?")) {
         const result = await finish(url);
         if (result) {
           setDestination(result.destination);
@@ -192,7 +204,16 @@ export default function App() {
               />
               <Button
                 title="Create an Onesa account"
-                onPress={() => { void Linking.openURL("https://auth.onesa.eu/register?audience=user").catch(fail); }}
+                disabled={busy}
+                onPress={async () => {
+                  if (submitting.current) return;
+                  submitting.current = true; setBusy(true);
+                  try {
+                    const url = await register(destination);
+                    if (url) await receive(url);
+                  } catch (e) { fail(e); }
+                  finally { submitting.current = false; setBusy(false); }
+                }}
               />
             </View>
           ) : (

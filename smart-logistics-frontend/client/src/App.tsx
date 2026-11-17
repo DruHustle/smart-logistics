@@ -4,6 +4,7 @@ import { Route, Switch, Router as WouterRouter, Redirect } from "wouter";
 import {
   hostedWorkspace,
   portalRegistration,
+  rememberRegistration,
   portalSecurity,
 } from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
@@ -54,8 +55,9 @@ function LegacyRedirect({ href }: { href: string }) {
 function PortalAccountRedirect({ register }: { register: boolean }) {
   const url = register ? portalRegistration : portalSecurity;
   useEffect(() => {
+    if (register) rememberRegistration();
     window.location.replace(url);
-  }, [url]);
+  }, [url, register]);
   return <a href={url}>Continue to your Onesa account</a>;
 }
 
