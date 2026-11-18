@@ -113,7 +113,7 @@ export async function register(destination: string | null, audience: "user" | "a
   await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
-  const url = "https://auth.onesa.eu/register?audience=" + audience + "&product=logistics&platform=" + Platform.OS;
+  const url = "https://account.onesa.eu/register?audience=" + audience + "&product=logistics&platform=" + Platform.OS;
   const result = await openAuthSessionAsync(url, registrationReturn);
   if (result.type === "success" && result.url === registrationReturn) return result.url;
   await SecureStore.deleteItemAsync(registrationKey);
