@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useLocation, Link } from "wouter";
+import { hostedWorkspace, identityRegistration, rememberRegistration } from "@/lib/portal-account";
 
 export default function Register() {
   const { register } = useAuth();
@@ -41,6 +42,29 @@ export default function Register() {
       setIsLoading(false);
     }
   };
+
+  if (hostedWorkspace) return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <h1 className="text-2xl font-bold">Create your Onesa account</h1>
+          <CardDescription>
+            One Onesa account works across products. Your Logistics workspace and
+            administrator access are approved separately.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button asChild className="w-full">
+            <a href={identityRegistration("user")} onClick={rememberRegistration}>Register as a user</a>
+          </Button>
+          <Button asChild variant="outline" className="w-full">
+            <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>
+          </Button>
+          <Button asChild variant="ghost" className="w-full"><Link href="/login">Back to sign in</Link></Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
