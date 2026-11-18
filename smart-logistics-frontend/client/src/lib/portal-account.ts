@@ -8,6 +8,7 @@ export function identityRegistration(audience: "user" | "admin") {
   return "https://account.onesa.eu/register?audience=" + audience + "&product=logistics&platform=web";
 }
 export const portalSecurity = "https://portal.onesa.eu/account/security";
+export const identityRecovery = "https://account.onesa.eu/account/recovery";
 
 const registrationKey = "onesa.product-registration";
 
