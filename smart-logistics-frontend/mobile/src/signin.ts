@@ -3,6 +3,7 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
 import { PendingOnesaTransactions } from "./callback";
+import { fetchIdentity } from "./identity-http";
 import { issuer, origin, redirect } from "./config";
 
 const key = "operator.signin.pending";
@@ -21,7 +22,7 @@ const random = () =>
 const endpoint = origin + "/api/auth/onesa/native";
 
 export async function start(destination: string | null) {
-  const response = await fetch(endpoint + "/config");
+  const response = await fetchIdentity(endpoint + "/config");
   if (!response.ok)
     throw Error("Onesa sign-in is unavailable. Try again later.");
   const config = await response.json();
@@ -84,7 +85,7 @@ export async function finish(url: string) {
   const result = await transactions.claim(url, origin);
   if (!result) return null;
   const { code, pending } = result;
-  const response = await fetch(endpoint + "/exchange", {
+  const response = await fetchIdentity(endpoint + "/exchange", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
