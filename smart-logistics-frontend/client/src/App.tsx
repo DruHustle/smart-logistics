@@ -1,12 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch, Router as WouterRouter, Redirect } from "wouter";
-import {
-  hostedWorkspace,
-  identityRegistration,
-  rememberRegistration,
-  portalSecurity,
-} from "./lib/portal-account";
+import { hostedWorkspace, identityRecovery } from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider, PreferencesProvider } from "./contexts/ThemeContext";
@@ -52,29 +47,26 @@ function LegacyRedirect({ href }: { href: string }) {
   const q = useHashQuery().toString();
   return <Redirect to={href + (q ? "?" + q : "")} replace />;
 }
-function PortalAccountRedirect({ register }: { register: boolean }) {
-  const url = register ? identityRegistration("user") : portalSecurity;
-  useEffect(() => {
-    if (register) rememberRegistration();
-    window.location.replace(url);
-  }, [url, register]);
-  return <a href={url}>Continue to your Onesa account</a>;
+function ManagedRecoveryRedirect() {
+  // Never send legacy password reset tokens to the central identity provider.
+  useEffect(() => { window.location.replace(identityRecovery); }, []);
+  return <a href={identityRecovery}>Open Onesa sign-in to recover your account</a>;
 }
 
 function WorkspaceRouter() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [location] = useWorkspaceLocation();
   const path = location.split("?")[0];
-  if (
-    hostedWorkspace &&
-    [
-      "/register",
-      "/forgot-password",
-      "/reset-password",
-      "/account/password",
-    ].includes(path)
-  )
-    return <PortalAccountRedirect register={path === "/register"} />;
+  // Hosted registration must present both user and administrator enrollment.
+  // Legacy Portal redirects here prevented the new Account screens rendering.
+  if (hostedWorkspace && ["/register", "/forgot-password"].includes(path))
+    return (
+      <Suspense fallback={loading}>
+        {path === "/register" ? <Register /> : <ForgotPassword />}
+      </Suspense>
+    );
+  if (hostedWorkspace && ["/reset-password", "/account/password"].includes(path))
+    return <ManagedRecoveryRedirect />;
 
   if (location === "/reset-password")
     return (
