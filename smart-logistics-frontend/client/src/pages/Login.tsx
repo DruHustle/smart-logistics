@@ -6,7 +6,7 @@ import {
   identityRegistration,
   rememberRegistration,
   resumeRegistration,
-  portalSecurity,
+  identityRecovery,
   portalSignIn,
 } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
@@ -235,7 +235,7 @@ export default function Login() {
                     type="button"
                     onClick={() =>
                       hostedWorkspace
-                        ? window.location.assign(portalSecurity)
+                        ? window.location.assign(identityRecovery)
                         : navigate("/forgot-password")
                     }
                     className="text-xs text-primary hover:underline"
