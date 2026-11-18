@@ -76,7 +76,7 @@ for (const [route, purpose] of [
   });
 }
 
-test("hosted login offers Portal account access during an issuer outage", async ({
+test("hosted login fails closed without Portal fallback during an issuer outage", async ({
   page,
   baseURL,
 }) => {
@@ -100,13 +100,13 @@ test("hosted login offers Portal account access during an issuer outage", async 
   );
 
   await page.goto(hosted + "/#/login");
-  const portal = page
-    .getByRole("status")
-    .getByRole("link", { name: "Company Portal" });
-  await expect(portal).toHaveAttribute("href", "https://portal.onesa.eu/admin");
-  await portal.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL("https://portal.onesa.eu/admin");
+  // A failed issuer never authorizes the unrelated Portal admin entry.
+  // Recovery is retrying the real issuer, not redirecting to weaker credentials.
+  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page.getByRole("status").getByRole("link", { name: "Company Portal" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Retry Onesa sign-in" }).click();
+  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page).toHaveURL(hosted + "/#/login");
 
   await page.goto(hosted + "/#/login");
   await page.getByRole("button", { name: "Sign Up", exact: true }).click();
