@@ -76,7 +76,7 @@ for (const [route, purpose] of [
   });
 }
 
-test("hosted login offers Portal account access during an issuer outage", async ({
+test("hosted login fails closed without Portal fallback during an issuer outage", async ({
   page,
   baseURL,
 }) => {
@@ -100,24 +100,35 @@ test("hosted login offers Portal account access during an issuer outage", async 
   );
 
   await page.goto(hosted + "/#/login");
-  const portal = page
-    .getByRole("status")
-    .getByRole("link", { name: "Company Portal" });
-  await expect(portal).toHaveAttribute("href", "https://portal.onesa.eu/admin");
-  await portal.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL("https://portal.onesa.eu/admin");
+  // A failed issuer never authorizes the unrelated Portal admin entry.
+  // Recovery is retrying the real issuer, not redirecting to weaker credentials.
+  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page.getByRole("status").getByRole("link", { name: "Company Portal" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Retry Onesa sign-in" }).click();
+  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page).toHaveURL(hosted + "/#/login");
 
   await page.goto(hosted + "/#/login");
   await page.getByRole("button", { name: "Sign Up", exact: true }).click();
   await expect(page).toHaveURL("https://account.onesa.eu/register?audience=user&product=logistics&platform=web");
-  for (const [route, destination] of [
-    ["/register", "https://account.onesa.eu/register?audience=user&product=logistics&platform=web"],
-    ["/forgot-password", "https://portal.onesa.eu/account/security"],
-  ]) {
-    await page.goto(hosted + "/#" + route);
-    await expect(page).toHaveURL(destination);
-  }
+  const user = "https://account.onesa.eu/register?audience=user&product=logistics&platform=web";
+  const admin = "https://account.onesa.eu/register?audience=admin&product=logistics&platform=web";
+  await page.goto(hosted + "/#/register");
+  await expect(page.getByRole("heading", {name:"Create your Onesa account"})).toBeVisible();
+  await expect(page.getByRole("link", {name:"Register as a user"})).toHaveAttribute("href", user);
+  await expect(page.getByRole("link", {name:"Request administrator access"})).toHaveAttribute("href", admin);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("link", {name:"Request administrator access"}).click();
+  await expect(page).toHaveURL(admin);
+
+  await page.goto(hosted + "/#/forgot-password");
+  await expect(page.getByRole("heading", {name:"Recover your Onesa account"})).toBeVisible();
+  await page.getByRole("link", {name:"Open Onesa sign-in"}).click();
+  await expect(page).toHaveURL("https://account.onesa.eu/login");
+
+  // Legacy product reset tokens must not be forwarded to a central IdP.
+  await page.goto(hosted + "/#/reset-password?token=synthetic.private.value");
+  await expect(page).toHaveURL("https://account.onesa.eu/login");
 });
 
 for (const audience of ["user", "admin"]) {

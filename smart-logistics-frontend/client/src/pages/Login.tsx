@@ -6,8 +6,7 @@ import {
   identityRegistration,
   rememberRegistration,
   resumeRegistration,
-  portalSecurity,
-  portalSignIn,
+  identityRecovery,
 } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
@@ -194,14 +193,18 @@ export default function Login() {
           {hostedWorkspace &&
             onesaEnabled === false &&
             signInMode === "live" && (
-              <p role="status">
-                The shared sign-in service is not connected. You can retry or
-                manage your account in{" "}
-                <a className="text-primary underline" href={portalSignIn}>
-                  Company Portal
-                </a>
-                .
-              </p>
+              <div role="status" className="space-y-2 text-sm">
+                <p>Onesa Identity sign-in is currently unavailable. No alternative
+                account or administrator sign-in is used.</p>
+                <Button type="button" variant="outline" disabled={isLoading}
+                  onClick={() => {
+                    setOnesaEnabled(null);
+                    void apiAuthService.onesaAvailable()
+                      .then(setOnesaEnabled).catch(() => setOnesaEnabled(false));
+                  }}>
+                  Retry Onesa sign-in
+                </Button>
+              </div>
             )}
           {(!hostedWorkspace || signInMode === "demo" || linkRequested) && (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -235,7 +238,7 @@ export default function Login() {
                     type="button"
                     onClick={() =>
                       hostedWorkspace
-                        ? window.location.assign(portalSecurity)
+                        ? window.location.assign(identityRecovery)
                         : navigate("/forgot-password")
                     }
                     className="text-xs text-primary hover:underline"

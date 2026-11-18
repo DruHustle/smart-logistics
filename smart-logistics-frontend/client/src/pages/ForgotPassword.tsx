@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { hostedWorkspace, identityRecovery } from "@/lib/portal-account";
 
 export default function ForgotPassword() {
   const { requestPasswordReset } = useAuth();
@@ -38,6 +39,24 @@ export default function ForgotPassword() {
       setIsLoading(false);
     }
   };
+
+  if (hostedWorkspace) return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <h1 className="text-2xl font-bold">Recover your Onesa account</h1>
+          <CardDescription>
+            Logistics uses your shared Onesa account. At the Onesa sign-in screen,
+            choose Forgot password to reset your password securely.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button asChild className="w-full"><a href={identityRecovery}>Open Onesa sign-in</a></Button>
+          <Button variant="outline" className="w-full" onClick={() => navigate("/login")}>Back to sign in</Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
 
   if (emailSent) {
     return (
