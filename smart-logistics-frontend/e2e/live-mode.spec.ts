@@ -206,7 +206,8 @@ test("a real account switches from Demo to Live without demo dates or counts whi
   page,
 }) => {
   await liveSession(page);
-  await page.goto("/#/");
+  // Use an unbounded dashboard window so this fixture does not expire as CI time advances.
+  await page.goto("/#/?period=all");
   await expect(page.locator('.source-note[data-mode="live"]')).toBeVisible();
   await page.getByLabel("Data mode", { exact: true }).selectOption("demo");
   await expect(page.locator(".demo-note")).toContainText(

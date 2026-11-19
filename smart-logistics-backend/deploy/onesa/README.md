@@ -197,13 +197,18 @@ and [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/).
 
 ### Onesa administrator sign-in
 
-Apply migrations through `012_shared_registration_roles.sql` before deploying the Node API. The new columns track the signed role for profiles initially created by managed registration. Existing local roles and workspace memberships are preserved. External carrier connectors remain unaccepted by default; shipment-provider discovery, operator-created carrier shipments and signed carrier webhook ingestion stay blocked until a separately approved operator records `provider_accepted_at` after confirming provider acceptance. The application has no self-service route to assert this acceptance. Register
-the `logistics` client on the Portal with application URL
+Apply migrations through `012_shared_registration_roles.sql` before deploying the Node API. The new columns track the signed role for profiles initially created by managed registration. Existing local roles and workspace memberships are preserved. External carrier connectors remain unaccepted by default; shipment-provider discovery, operator-created carrier shipments and signed carrier webhook ingestion stay blocked until a separately approved operator records `provider_accepted_at` after confirming provider acceptance. The application has no self-service route to assert this acceptance. Register the confidential `logistics` web client with managed Onesa Identity
+at `https://auth.onesa.eu/`, using application origin
 `https://logistics.onesa.eu` and exact callback
-`https://logistics.onesa.eu/api/auth/onesa/callback`. Add the callback to
-the Portal frontend allowlist. Supply the matching confidential client ID
-and secret through the Logistics runtime environment and enable
-`ONESA_IDENTITY_ENABLED`. The frontend reads availability from the API.
+`https://logistics.onesa.eu/api/auth/onesa/callback`. Register a distinct
+public native client with the Logistics app redirect URI. Supply the web client
+ID and secret, native client ID, dedicated API audience and current/next
+public RS256 JWKS snapshot with expiry in the private runtime environment.
+Configure `ONESA_IDENTITY_MODE=managed` and the exact Auth0 issuer.
+Keep `ONESA_IDENTITY_ENABLED=false` until client registrations, callbacks,
+allowed web origin, product/role/MFA claims and trusted keys are verified; then
+enable it as a controlled deployment change. The frontend reads availability
+from the API.
 
 A verified platform administrator can then choose **Sign in with Onesa**.
 A new Logistics identity starts without workspace membership. An existing
