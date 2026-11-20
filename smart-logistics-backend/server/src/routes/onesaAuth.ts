@@ -20,13 +20,13 @@ import { accessIdentity, tokenProfile } from "../services/managedOnesa";
 
 type VerifiedAccount = {
   iss: string; sub: string; email: string; name: string;
-  onesa_product_roles: {logistics: "user" | "admin"};
+  onesa_product_roles: {logistics: "user" | "admin" | "administrator"};
   issuedAt?: number;
 };
 
 async function registrationAccount(identity: VerifiedAccount) {
   const {iss, sub, email, name, issuedAt} = identity;
-  const role = identity.onesa_product_roles.logistics;
+  const role = identity.onesa_product_roles.logistics === "administrator" ? "admin" : identity.onesa_product_roles.logistics;
   // Conflicting local addresses require the existing proof-of-ownership flow.
   // A concurrent first sign-in can only create one row for this issuer and subject.
   await connection.query(
