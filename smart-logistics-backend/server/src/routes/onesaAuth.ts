@@ -26,7 +26,7 @@ type VerifiedAccount = {
 
 async function registrationAccount(identity: VerifiedAccount) {
   const {iss, sub, email, name, issuedAt} = identity;
-  const role = identity.onesa_product_roles.logistics === "administrator" ? "admin" : identity.onesa_product_roles.logistics;
+  const role: VerifiedAccount["onesa_product_roles"]["logistics"] = identity.onesa_product_roles.logistics === "administrator" ? "admin" : identity.onesa_product_roles.logistics;
   // Conflicting local addresses require the existing proof-of-ownership flow.
   // A concurrent first sign-in can only create one row for this issuer and subject.
   await connection.query(
