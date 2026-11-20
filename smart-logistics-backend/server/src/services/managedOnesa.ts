@@ -44,10 +44,10 @@ export function accessIdentity(issuer:string,client:string,token:string,scope:Ke
   const p=verifyToken(token,issuer,scope.audience,scope);
   const stable=z.uuid().safeParse(p[claim+"user_id"]);
   const products=z.tuple([z.literal("logistics")]).safeParse(p[claim+"products"]);
-  const roles=z.tuple([z.enum(["user","admin"])]).safeParse(p[claim+"roles"]);
+  const roles=z.tuple([z.enum(["user","admin","administrator"])]).safeParse(p[claim+"roles"]);
   if(!stable.success || !products.success || !roles.success || p.exp!-p.iat!>300 ||
      p.azp!==undefined && p.azp!==client)throw new InactiveIdentity();
-  const admin=roles.data[0]==="admin";
+  const admin=roles.data[0]==="admin" || roles.data[0]==="administrator";
   const mfa=p[claim+"mfa_time"],now=Math.floor(Date.now()/1000);
   if(admin && (!Number.isSafeInteger(mfa) || mfa>p.iat! || mfa>now || now-mfa>=300))throw new InactiveIdentity();
   return {iss:"https://portal.onesa.eu/api/v1/identity",sub:stable.data,providerSubject:p.sub!,issuedAt:p.iat!,
