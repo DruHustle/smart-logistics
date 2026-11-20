@@ -16,7 +16,7 @@ test("approved ordinary Portal identities are accepted without granting administ
     await assert.rejects(liveIdentity(config, "synthetic-token"), InactiveIdentity);
     claims = { ...claims, amr: ["pwd", "otp"] };
     assert.equal((await liveIdentity(config, "synthetic-token")).onesa_product_roles.logistics, "admin");
-    claims = { ...claims, onesa_roles: [], onesa_product_roles: { logistics: "administrator" } };
+    claims = { ...claims, onesa_roles: [], onesa_product_roles: { logistics: "administrator" }, amr: ["pwd"] };
     await assert.rejects(liveIdentity(config, "synthetic-token"), InactiveIdentity);
     claims = { ...claims, amr: ["pwd", "otp"] };
     assert.equal((await liveIdentity(config, "synthetic-token")).onesa_product_roles.logistics, "admin");
