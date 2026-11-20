@@ -166,7 +166,7 @@ async function legacyIdentity(config: Config, token: string) {
     (productAdmin && !a.amr.some((v) => v === "otp" || v === "mfa"))
   )
     throw new InactiveIdentity();
-  return { ...a, onesa_product_roles: { logistics: productAdmin ? "admin" : "user" } };
+  return { ...a, onesa_product_roles: { logistics: productAdmin ? "admin" as const : "user" as const } };
 }
 
 // A return destination is navigation only; workspace/object access is checked separately.
