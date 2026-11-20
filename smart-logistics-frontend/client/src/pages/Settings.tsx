@@ -18,6 +18,7 @@ export default function Settings() {
         title="Preferences"
         description="Appearance and accessibility settings persist on this device. Account preferences are scoped to the signed-in user."
       />
+      {user?.role === "admin" && <p><a href="https://account.onesa.eu/admin?product=logistics">Manage Onesa administrators</a></p>}
       <div className="max-w-3xl space-y-5">
         <Panel title="Appearance">
           <div className="preference-row theme-preference">
