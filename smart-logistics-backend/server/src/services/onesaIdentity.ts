@@ -137,7 +137,7 @@ const assertion = z.object({
   amr: z.array(z.string()),
   onesa_roles: z.array(z.string()),
   onesa_applications: z.array(z.string()),
-  onesa_product_roles: z.object({ logistics: z.enum(["user", "admin"]) }),
+  onesa_product_roles: z.object({ logistics: z.enum(["user", "admin", "administrator"]) }),
 });
 export function liveIdentity(config:Config,token:string) {
   if (!config.managed) return legacyIdentity(config, token);
@@ -154,7 +154,8 @@ async function legacyIdentity(config: Config, token: string) {
   );
   if (!result.success) throw new InactiveIdentity();
   const a = result.data,
-    now = Math.floor(Date.now() / 1000);
+    now = Math.floor(Date.now() / 1000),
+    productAdmin = ["admin", "administrator"].includes(a.onesa_product_roles.logistics);
   if (
     a.iss !== config.issuer ||
     a.aud !== config.client ||
@@ -162,11 +163,10 @@ async function legacyIdentity(config: Config, token: string) {
     a.auth_time > now ||
     now - a.auth_time >= 28800 ||
     !a.onesa_applications.includes("logistics") ||
-    a.onesa_roles.includes("global_admin") !== (a.onesa_product_roles.logistics === "admin") ||
-    (a.onesa_product_roles.logistics === "admin" && !a.amr.some((v) => v === "otp" || v === "mfa"))
+    (productAdmin && !a.amr.some((v) => v === "otp" || v === "mfa"))
   )
     throw new InactiveIdentity();
-  return a;
+  return { ...a, onesa_product_roles: { logistics: productAdmin ? "admin" as const : "user" as const } };
 }
 
 // A return destination is navigation only; workspace/object access is checked separately.

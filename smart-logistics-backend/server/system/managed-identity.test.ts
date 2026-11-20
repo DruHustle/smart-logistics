@@ -95,12 +95,12 @@ test("managed web and native first use, tier changes, scoped shipments and offli
     assert.equal(result.status,200);
     return "imsop_access="+(await result.json()).session;
   };
-  for (const tier of ["user","admin"]) {
+  for (const [tier, expectedRole] of [["user","user"],["admin","admin"],["administrator","admin"]] as const) {
     role=tier; useNewAccount("new-"+tier+"-web");
-    await noWorkspace(await signIn(),tier);
+    await noWorkspace(await signIn(),expectedRole);
     useNewAccount("new-"+tier+"-native");
     const sessions=await Promise.all([nativeCookie(),nativeCookie()]);
-    for (const cookie of sessions) await noWorkspace(cookie,tier);
+    for (const cookie of sessions) await noWorkspace(cookie,expectedRole);
     assert.equal((await connection.query("SELECT count(*) FROM users WHERE onesa_subject=$1",[stable])).rows[0].count,"1");
   }
 
