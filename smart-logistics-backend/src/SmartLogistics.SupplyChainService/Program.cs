@@ -93,8 +93,9 @@ app.MapGet("/version", () => Results.Ok(ReleaseIdentity.Current)).AllowAnonymous
 app.MapGet("/health", () => Results.Ok(new { status = "ok", release = ReleaseIdentity.Current, service = "SmartLogistics.SupplyChainService" })).AllowAnonymous();
 app.MapGet("/ready", async (ApplicationDbContext db, CancellationToken cancellationToken) =>
 {
-    var applied=await db.Database.GetAppliedMigrationsAsync(cancellationToken);
-    var canConnect=applied.Contains("202611140001_ShipmentStock");
+    // Failed database queries must produce readiness 503, not an unhandled 500.
+    var canConnect=await SmartLogistics.SupplyChainService.SupplyChainReadiness.CheckAsync(
+        token => db.Database.GetAppliedMigrationsAsync(token), cancellationToken);
     return canConnect
         ? Results.Ok(new { status = "ready", service = "SmartLogistics.SupplyChainService" })
         : Results.Json(new { status = "not-ready", service = "SmartLogistics.SupplyChainService" }, statusCode: StatusCodes.Status503ServiceUnavailable);
