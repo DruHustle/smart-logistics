@@ -109,9 +109,9 @@ class ConfigurationBoundaries(unittest.TestCase):
         values = environment("runtime.env.example")
         self.assertIn("<current-or-qualified-database-host>", values["DATABASE_URL"])
         self.assertIn("sslmode=verify-full", values["DATABASE_URL"])
-        self.assertIn("sslrootcert=/run/onesa-db-ca/root.crt", values["DATABASE_URL"])
+        self.assertIn("sslrootcert=/run/onesa/logistics-db-ca.crt", values["DATABASE_URL"])
         self.assertIn("SSL Mode=VerifyFull", values["ConnectionStrings__DefaultConnection"])
-        self.assertIn("Root Certificate=/run/onesa-db-ca/root.crt",
+        self.assertIn("Root Certificate=/run/onesa/logistics-db-ca.crt",
                       values["ConnectionStrings__DefaultConnection"])
 
     def test_overlay_changes_only_network_and_required_public_ca(self):
@@ -122,7 +122,7 @@ class ConfigurationBoundaries(unittest.TestCase):
         app = self.overlay["services"]["app"]
         self.assertEqual(set(app), {"networks", "volumes"})
         mount, = app["volumes"]
-        self.assertEqual(mount["target"], "/run/onesa-db-ca/root.crt")
+        self.assertEqual(mount["target"], "/run/onesa/logistics-db-ca.crt")
         self.assertTrue(mount["read_only"])
         self.assertFalse(mount["bind"]["create_host_path"])
 
