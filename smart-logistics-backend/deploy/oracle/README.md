@@ -13,8 +13,11 @@ existing private runtime before staging this candidate.
 - Independent connector: `onesa-logistics-tunnel.service`
 
 The app keeps its existing pinned image selection, resources and loopback mapping
-`127.0.0.1:11001:10000`. The optional database overlay keeps the existing
-`onesa-logistics-database` network. Preserve the installed runtime directory,
+`127.0.0.1:11001:10000`. Since 22 November 2026 production uses the private
+PostgreSQL container on the VM, so the database overlay
+([`../onesa/compose.application-database.yaml`](../onesa/compose.application-database.yaml))
+is required: it joins the existing internal `onesa-logistics-database` network and
+mounts the server CA read-only at `/run/onesa/logistics-db-ca.crt` for verify-full TLS. Preserve the installed runtime directory,
 private manifests, `.deployment.lock`, retention policy, database identities,
 queues and credentials; an ingress change does not relocate or copy them.
 
@@ -49,7 +52,7 @@ and provider configuration. This candidate does not copy or delete a database. N
 commit this file. JSON strings must escape `$` as `$$` for Compose interpolation.
 
 From the runtime directory, validate with
-`sudo docker compose -f compose.yaml -f compose.runtime.json config --quiet`,
+`sudo docker compose -f compose.yaml -f compose.runtime.json -f compose.application-database.yaml config --quiet`,
 then update through the retention-aware deployment command below.
 If using this repository template directly, set `APP_IMAGE` to the tested tag.
 Verify readiness, anonymous authentication rejection and allowed/denied origins
@@ -189,9 +192,16 @@ additional qualified Compose files in the command, run:
 ```sh
 sudo python3 ./tools/deploy_compose.py \
   --project-directory . \
-  --file compose.yaml --file compose.runtime.json --service app \
+  --file compose.yaml --file compose.runtime.json \
+  --file compose.application-database.yaml --service app \
   --origin http://127.0.0.1:11001 --expect-revision FULL_BACKEND_SHA
 ```
+
+Install the reviewed `compose.application-database.yaml` beside the manifest.
+For any origin other than the local development gateway, the command renders the
+model first and refuses, before `up`, unless `app` joins the external
+`onesa-logistics-database` network and mounts the CA read-only at
+`/run/onesa/logistics-db-ca.crt`; a redeploy can never detach the database.
 
 For the local development Compose stack, run from the backend repository:
 

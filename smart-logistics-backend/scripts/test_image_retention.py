@@ -15,6 +15,20 @@ def image(identity, refs=None, title=None):
             "Config": {"Labels": {"org.opencontainers.image.title": title} if title else {}}}
 
 
+def attached():
+    """Rendered Oracle app with the private database network and read-only CA."""
+    return {
+        "services": {"app": {
+            "networks": {"runtime": None, "database": None},
+            "volumes": [{"type": "bind", "source": "/etc/synthetic/server.crt",
+                         "target": deploy_compose.DATABASE_CA, "read_only": True,
+                         "bind": {"create_host_path": False}}],
+        }},
+        "networks": {"runtime": {"name": "imsop-app-backend-runtime"},
+                     "database": {"name": deploy_compose.DATABASE_NETWORK, "external": True}},
+    }
+
+
 CURRENT = image("sha256:current", ["imsop-app-backend:current"])
 OLD = image("sha256:old", ["imsop-app-backend:old"])
 
@@ -178,6 +192,7 @@ class RetentionTests(unittest.TestCase):
                      patch.object(deploy_compose, "container_images", side_effect=[{}, {
                          "new-container": {"image": selected["Id"], "service": "app"}}]), \
                      patch.object(deploy_compose, "inspect_image", side_effect=known_images.__getitem__), \
+                     patch.object(deploy_compose, "rendered", return_value=attached()), \
                      patch.object(deploy_compose.subprocess, "run"), \
                      patch.object(deploy_compose, "verify"), patch("builtins.print"), \
                      patch.object(deploy_compose, "cleanup", return_value={"errors": []}) as cleanup:
@@ -210,6 +225,7 @@ class RetentionTests(unittest.TestCase):
                  patch.object(deploy_compose, "container_images", side_effect=[{}, {
                      "new-container": {"image": CURRENT["Id"], "service": "app"}}]), \
                  patch.object(deploy_compose, "inspect_image", side_effect=inspect), \
+                 patch.object(deploy_compose, "rendered", return_value=attached()), \
                  patch.object(deploy_compose.subprocess, "run"), \
                  patch.object(deploy_compose, "verify"), patch("builtins.print"), \
                  patch.object(deploy_compose, "cleanup", return_value={"errors": []}) as cleanup:
@@ -227,6 +243,7 @@ class RetentionTests(unittest.TestCase):
             with patch("sys.argv", ["deploy_compose.py", "--project-directory", folder,
                                    "--file", "compose.yaml", "--origin", "http://127.0.0.1:8080"]), \
                  patch.object(deploy_compose, "container_images", return_value={}), \
+                 patch.object(deploy_compose, "rendered", return_value=attached()), \
                  patch.object(deploy_compose.subprocess, "run"), \
                  patch.object(deploy_compose, "verify", side_effect=RuntimeError("not ready")), \
                  patch.object(deploy_compose, "cleanup") as cleanup:
@@ -251,6 +268,7 @@ class RetentionTests(unittest.TestCase):
                                        "--origin", "http://127.0.0.1:11001", "--expect-revision", "a" * 40, "--service", "app"]), \
                      patch.object(deploy_compose, "container_images", side_effect=snapshots), \
                      patch.object(deploy_compose, "inspect_image", side_effect=inspect), \
+                     patch.object(deploy_compose, "rendered", return_value=attached()), \
                      patch.object(deploy_compose.subprocess, "run") as run, \
                      patch.object(deploy_compose, "verify") as verify, \
                      patch("builtins.print"), \
@@ -265,3 +283,77 @@ class RetentionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DatabaseAttachmentTests(unittest.TestCase):
+    """An Oracle redeploy must never drop the private database network or CA."""
+
+    def test_attached_service_is_accepted(self):
+        deploy_compose.require_database_attachment(attached(), ["app"])
+        deploy_compose.require_database_attachment(attached(), [])
+
+    def test_detaching_changes_are_refused(self):
+        changes = [
+            lambda c: c["services"]["app"]["networks"].pop("database"),
+            lambda c: c["networks"]["database"].pop("external"),
+            lambda c: c["networks"]["database"].update(name="another-network"),
+            lambda c: c["services"]["app"].pop("volumes"),
+            lambda c: c["services"]["app"]["volumes"][0].update(read_only=False),
+            lambda c: c["services"]["app"]["volumes"][0].update(target="/run/other.crt"),
+            lambda c: c["services"]["app"]["volumes"][0].update(type="volume"),
+            lambda c: c["services"].pop("app"),
+        ]
+        for change in changes:
+            config = attached()
+            change(config)
+            with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, "Nothing was changed"):
+                deploy_compose.require_database_attachment(config, ["app"])
+
+    def test_oracle_deploy_without_attachment_stops_before_compose_up(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = pathlib.Path(folder) / ".image-retention.json"
+            state.write_text(json.dumps({"services": {"app": {"current": "old", "rollback": "older"}}}))
+            original = state.read_bytes()
+            detached = attached()
+            detached["services"]["app"]["networks"].pop("database")
+            with patch("sys.argv", ["deploy_compose.py", "--project-directory", folder,
+                                   "--file", "compose.yaml", "--file", "compose.runtime.json",
+                                   "--origin", "http://127.0.0.1:11001",
+                                   "--expect-revision", "a" * 40, "--service", "app"]), \
+                 patch.object(deploy_compose, "container_images", return_value={}), \
+                 patch.object(deploy_compose, "rendered", return_value=detached) as render, \
+                 patch.object(deploy_compose.subprocess, "run") as run, \
+                 patch.object(deploy_compose, "verify") as verify, \
+                 patch.object(deploy_compose, "cleanup") as cleanup:
+                with self.assertRaisesRegex(RuntimeError, deploy_compose.DATABASE_NETWORK):
+                    deploy_compose.main()
+            command = render.call_args.args[0]
+            root = pathlib.Path(folder).resolve()
+            self.assertEqual(command[-4:], ["-f", str(root / "compose.yaml"),
+                                            "-f", str(root / "compose.runtime.json")])
+            self.assertNotIn("up", command)
+            run.assert_not_called()
+            verify.assert_not_called()
+            cleanup.assert_not_called()
+            self.assertEqual(state.read_bytes(), original)
+
+    def test_rendered_model_is_parsed_without_printing(self):
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(attached()), stderr="")
+        with patch.object(deploy_compose.subprocess, "run", return_value=completed) as run, \
+             patch("builtins.print") as printed:
+            self.assertEqual(deploy_compose.rendered(["docker", "compose"]), attached())
+        self.assertEqual(run.call_args.args[0], ["docker", "compose", "config", "--format", "json"])
+        self.assertTrue(run.call_args.kwargs["capture_output"])
+        printed.assert_not_called()
+
+    def test_local_development_deploy_does_not_require_the_production_database(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch("sys.argv", ["deploy_compose.py", "--project-directory", folder,
+                                   "--file", "docker-compose.yml", "--origin", "http://127.0.0.1:8080"]), \
+                 patch.object(deploy_compose, "container_images", return_value={}), \
+                 patch.object(deploy_compose, "rendered") as render, \
+                 patch.object(deploy_compose.subprocess, "run"), \
+                 patch.object(deploy_compose, "verify", side_effect=RuntimeError("stop after up")):
+                with self.assertRaisesRegex(RuntimeError, "stop after up"):
+                    deploy_compose.main()
+            render.assert_not_called()

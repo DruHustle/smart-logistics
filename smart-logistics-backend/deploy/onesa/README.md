@@ -80,7 +80,7 @@ network and a read-only CA certificate mount to the retained Oracle `app`
 service. The Logistics-owned `runtime` network remains through Compose merging;
 the external database network remains `onesa-logistics-database`.
 It changes no app image, environment or port. The mounted CA path
-`/run/onesa-db-ca/root.crt` is referenced by both Node and .NET examples.
+`/run/onesa/logistics-db-ca.crt` is referenced by both Node and .NET examples.
 For an existing external provider, preserve its qualified TLS/secret mechanism;
 do not attach this candidate network merely to change a hostname.
 
