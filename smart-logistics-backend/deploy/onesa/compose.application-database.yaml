@@ -7,8 +7,8 @@
       "volumes": [
         {
           "type": "bind",
-          "source": "${LOGISTICS_DATABASE_CA_FILE:?Use the existing trusted database CA file}",
-          "target": "/run/onesa-db-ca/root.crt",
+          "source": "${LOGISTICS_DATABASE_CA_FILE:-/etc/onesa/production-databases/logistics/server.crt}",
+          "target": "/run/onesa/logistics-db-ca.crt",
           "read_only": true,
           "bind": {
             "create_host_path": false
