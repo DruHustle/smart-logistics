@@ -12,6 +12,12 @@ import urllib.request
 
 from image_retention import cleanup, container_images, inspect_image, ownership
 
+LOCAL_ORIGIN = "http://127.0.0.1:8080"
+# Production reaches its private PostgreSQL container on the VM only through this
+# internal network and verifies it against this read-only CA (verify-full TLS).
+DATABASE_NETWORK = "onesa-logistics-database"
+DATABASE_CA = "/run/onesa/logistics-db-ca.crt"
+
 
 def verify(url, revision):
     base = url.rstrip("/")
@@ -22,6 +28,30 @@ def verify(url, revision):
         version = json.load(response)
     if version.get("apiContract") != 2 or (revision and version.get("revision") != revision):
         raise RuntimeError("Release identity mismatch; image cleanup skipped")
+
+
+def rendered(command):
+    """Render the exact deployment model; it holds secrets, so it is never printed."""
+    result = subprocess.run([*command, "config", "--format", "json"],
+                            check=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+
+def require_database_attachment(config, services):
+    """Refuse an Oracle deployment that would detach a service from its database."""
+    networks = config.get("networks") or {}
+    for name in services or ["app"]:
+        service = (config.get("services") or {}).get(name) or {}
+        attached = [networks.get(key) or {} for key in service.get("networks") or {}]
+        database = [network for network in attached
+                    if network.get("name") == DATABASE_NETWORK and network.get("external") is True]
+        ca = [volume for volume in service.get("volumes") or []
+              if volume.get("type") == "bind" and volume.get("target") == DATABASE_CA
+              and volume.get("read_only") is True]
+        if len(database) != 1 or len(ca) != 1:
+            raise RuntimeError(
+                f"{name} must join {DATABASE_NETWORK} and mount its CA read-only at "
+                f"{DATABASE_CA}; include compose.application-database.yaml. Nothing was changed")
 
 
 def retained_services(before, after, previous):
@@ -51,7 +81,8 @@ def main():
         parser.error("--expect-revision must be an exact SHA")
     if args.project_name != "imsop-app-backend":
         parser.error("This deployment helper manages only imsop-app-backend")
-    if args.origin.rstrip("/") != "http://127.0.0.1:8080" and not args.expect_revision:
+    oracle = args.origin.rstrip("/") != LOCAL_ORIGIN
+    if oracle and not args.expect_revision:
         parser.error("An exact revision is required outside the local development gateway")
     with (root / ".deployment.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -71,6 +102,8 @@ def main():
         command = ["docker", "compose", "--project-directory", str(root), "--project-name", args.project_name]
         for file in args.file:
             command += ["-f", str((root / file).resolve())]
+        if oracle:
+            require_database_attachment(rendered(command), args.service)
         command += ["up", "--detach", "--wait", "--wait-timeout", "120"]
         if args.build:
             command.append("--build")
