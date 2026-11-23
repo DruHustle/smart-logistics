@@ -42,6 +42,46 @@ export function nativeCode(
   return code;
 }
 
+export function ownsNativeCallback(incoming: string, pending: PendingOnesa): boolean {
+  try {
+    nativeCode(incoming, pending, pending.origin);
+    return true;
+  } catch (error) {
+    return error instanceof Error && error.message === "onesa_denied";
+  }
+}
+
+export async function receiveBrowserCallback(
+  open: () => Promise<{ type: string; url?: string }>,
+  subscribe: (receive: (url: string) => void) => () => void,
+  accepts: (url: string) => boolean,
+  graceMs: number,
+): Promise<string | null> {
+  let receive: (url: string) => void = () => {};
+  const delivered = new Promise<string>(resolve => { receive = resolve; });
+  const unsubscribe = subscribe(url => { if (accepts(url)) receive(url); });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const first = await Promise.race([
+      delivered,
+      open(),
+    ]);
+    if (typeof first === "string") return first;
+    if (first.type === "success") {
+      if (typeof first.url !== "string" || !accepts(first.url)) throw Error("unauthorized");
+      return first.url;
+    }
+    if (graceMs <= 0) return null;
+    const deadline = new Promise<null>(resolve => {
+      timeout = setTimeout(() => resolve(null), graceMs);
+    });
+    return await Promise.race([delivered, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    unsubscribe();
+  }
+}
+
 type PendingStore = {
   read(): Promise<string | null>;
   write(value: string): Promise<void>;

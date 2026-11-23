@@ -1,8 +1,8 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
-import { PendingOnesaTransactions } from "./callback";
+import { ownsNativeCallback, PendingOnesaTransactions, receiveBrowserCallback, type PendingOnesa } from "./callback";
 import { fetchIdentity } from "./identity-http";
 import { issuer, origin, redirect } from "./config";
 
@@ -20,6 +20,11 @@ const random = () =>
     b.toString(16).padStart(2, "0")
   ).join("");
 const endpoint = origin + "/api/auth/onesa/native";
+const callbackGrace = Platform.OS === "ios" ? 1000 : 0;
+const observeCallback = (receive: (url: string) => void) => {
+  const subscription = Linking.addEventListener("url", ({ url }) => receive(url));
+  return () => subscription.remove();
+};
 
 export async function start(destination: string | null) {
   const response = await fetchIdentity(endpoint + "/config");
@@ -58,7 +63,7 @@ export async function start(destination: string | null) {
     code_challenge_method: "S256",
     redirect_uri: redirect,
   });
-  await transactions.save({
+  const pending: PendingOnesa = {
     origin,
     issuer,
     state,
@@ -66,15 +71,17 @@ export async function start(destination: string | null) {
     nonce,
     destination,
     expires: Date.now() + 300000,
-  });
+  };
+  await transactions.save(pending);
   try {
-    const result = await openAuthSessionAsync(
-      issuer + "authorize?" + params,
-      redirect
+    const callback = await receiveBrowserCallback(
+      () => openAuthSessionAsync(issuer + "authorize?" + params, redirect),
+      observeCallback,
+      url => ownsNativeCallback(url, pending),
+      callbackGrace,
     );
-    if (result.type === "success") return result.url;
-    await transactions.clear(state);
-    return null;
+    if (!callback) throw Error("Onesa sign-in was cancelled. You can try again.");
+    return callback;
   } catch (error) {
     await transactions.clear(state);
     throw error;
@@ -115,10 +122,18 @@ export async function register(destination: string | null, audience: "user" | "a
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
   const url = "https://account.onesa.eu/register?audience=" + audience + "&product=logistics&platform=" + Platform.OS;
-  const result = await openAuthSessionAsync(url, registrationReturn);
-  if (result.type === "success" && result.url === registrationReturn) return result.url;
-  await SecureStore.deleteItemAsync(registrationKey);
-  return null;
+  let returned: string | null = null;
+  try {
+    returned = await receiveBrowserCallback(
+      () => openAuthSessionAsync(url, registrationReturn),
+      observeCallback,
+      candidate => candidate === registrationReturn,
+      callbackGrace,
+    );
+    return returned;
+  } finally {
+    if (!returned) await SecureStore.deleteItemAsync(registrationKey);
+  }
 }
 
 export async function registeredDestination(): Promise<string | null | undefined> {
