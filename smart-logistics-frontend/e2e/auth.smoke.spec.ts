@@ -131,6 +131,83 @@ test("hosted login fails closed without Portal fallback during an issuer outage"
   await expect(page).toHaveURL("https://account.onesa.eu/login");
 });
 
+test("a hosted visitor filters synthetic shipments and opens Onesa at the selected feature", async ({
+  page, baseURL,
+}) => {
+  const hosted = "https://logistics.example.invalid";
+  const apiRequests: string[] = [];
+  await page.route(hosted + "/**", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/api/")) apiRequests.push(url.pathname);
+    if (url.pathname === "/api/auth/session-state")
+      return route.fulfill({ json: { user: null } });
+    if (url.pathname === "/api/auth/onesa/config")
+      return route.fulfill({ json: { enabled: true } });
+    if (url.pathname === "/api/auth/onesa/start") {
+      expect(route.request().postDataJSON()).toEqual({ returnTo: "#/supply-chain/shipments" });
+      return route.fulfill({ json: { url: "https://identity.example.test/authorize" } });
+    }
+    if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 401 });
+    return route.fulfill({
+      response: await page.request.get(new URL(url.pathname + url.search, baseURL).href),
+    });
+  });
+  await page.route("https://identity.example.test/authorize", route =>
+    route.fulfill({ body: "Onesa sign-in" })
+  );
+
+  await page.goto(hosted);
+  await expect(page.getByRole("heading", { name: "Explore Smart Logistics" })).toBeVisible();
+  await expect(page.getByText("Demo accounts", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await page.getByText("Explore with sample data", { exact: true }).click();
+  const sampleTable = page.getByRole("table", { name: "Sample shipment tracking" });
+  await expect(sampleTable.getByRole("row", { name: /SHP-9921/ })).toBeVisible();
+  await expect(sampleTable.getByRole("row", { name: /SHP-7732/ })).toBeVisible();
+  await page.getByLabel("Shipment status").selectOption("Delayed");
+  await expect(sampleTable.getByRole("row", { name: /SHP-9921/ })).toBeVisible();
+  await expect(sampleTable.getByRole("row", { name: /SHP-7732/ })).toHaveCount(0);
+
+  await expect.poll(() => [...apiRequests].sort()).toEqual([
+    "/api/auth/onesa/config", "/api/auth/session-state",
+  ]);
+  await page.getByRole("button", { name: "Sign in for shipment tracking" }).click();
+  await expect(page).toHaveURL("https://identity.example.test/authorize");
+});
+
+test("hosted Logistics discards a previous browser demo session on an administrative route", async ({
+  page, baseURL,
+}) => {
+  const hosted = "https://logistics.example.invalid";
+  await page.addInitScript(() => {
+    localStorage.setItem("imsop_token", "mock_retained");
+    localStorage.setItem("imsop_session", JSON.stringify({
+      id: "1", name: "Admin User", email: "admin@imsop.io", role: "admin",
+    }));
+  });
+  const apiRequests: string[] = [];
+  await page.route(hosted + "/**", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/api/")) apiRequests.push(url.pathname);
+    if (url.pathname === "/api/auth/session-state")
+      return route.fulfill({ json: { user: null } });
+    if (url.pathname === "/api/auth/onesa/config")
+      return route.fulfill({ json: { enabled: true } });
+    if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 401 });
+    return route.fulfill({
+      response: await page.request.get(new URL(url.pathname + url.search, baseURL).href),
+    });
+  });
+
+  await page.goto(hosted + "/#/infrastructure/health");
+  await expect(page.getByRole("button", { name: "Sign in with Onesa", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service health", exact: true })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("imsop_token"))).toBeNull();
+  await expect.poll(() => [...apiRequests].sort()).toEqual([
+    "/api/auth/onesa/config", "/api/auth/session-state",
+  ]);
+});
+
 for (const audience of ["user", "admin"]) {
   test("Identity returns a Logistics " + audience + " to the tracked shipment", async ({page,baseURL})=>{
     const hosted="https://logistics.example.invalid";

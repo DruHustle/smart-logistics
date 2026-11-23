@@ -1,6 +1,7 @@
 import { API_ORIGIN } from "./api-origin";
 import { safeLocalStorage, safeSessionStorage } from "./storage";
 import { User, AuthResponse, IAuthService } from "./auth-types";
+import { hostedWorkspace } from "./portal-account";
 
 const TOKEN_KEY = "imsop_token",
   USER_KEY = "imsop_user";
@@ -58,10 +59,13 @@ export class ApiAuthService implements IAuthService {
   async onesaAvailable(): Promise<boolean> {
     return (await this.fetchApi("/api/auth/onesa/config")).enabled === true;
   }
-  async startOnesa(link?: { email: string; password: string }): Promise<void> {
+  async startOnesa(
+    link?: { email: string; password: string },
+    destination?: string
+  ): Promise<void> {
     if (safeSessionStorage.getItem("imsop:signout-pending"))
       await this.logout();
-    const current = window.location.hash;
+    const current = destination ?? window.location.hash;
     const returnTo = /^#\/(?!\/)/.test(current) &&
       !/^#\/(?:login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(current)
       ? current : safeSessionStorage.getItem("imsop:return-to") || "#/";
@@ -72,12 +76,12 @@ export class ApiAuthService implements IAuthService {
         returnTo,
       }),
     });
-    const destination = new URL(url);
-    if (destination.protocol !== "https:")
+    const issuer = new URL(url);
+    if (issuer.protocol !== "https:")
       throw Error("Invalid Onesa sign-in destination.");
     getStorage().removeItem(TOKEN_KEY);
     getStorage().removeItem(USER_KEY);
-    window.location.assign(destination.href);
+    window.location.assign(issuer.href);
   }
   async login(email: string, password: string): Promise<AuthResponse> {
     try {
@@ -111,10 +115,9 @@ export class ApiAuthService implements IAuthService {
     const t = getStorage().getItem(TOKEN_KEY);
     if (t?.startsWith("mock_")) return { success: false };
     try {
-      return {
-        success: true,
-        user: (await this.fetchApi("/api/auth/me")).user,
-      };
+      const sessionPath = hostedWorkspace ? "/api/auth/session-state" : "/api/auth/me";
+      const { user } = await this.fetchApi(sessionPath);
+      return user ? { success: true, user } : { success: false };
     } catch {
       return { success: false };
     }
