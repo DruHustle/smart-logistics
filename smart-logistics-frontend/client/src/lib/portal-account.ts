@@ -14,14 +14,18 @@ export const identityRecovery = "https://account.onesa.eu/login";
 
 const registrationKey = "onesa.product-registration";
 
+export function workspaceDestination(value: unknown): string | null {
+  return typeof value === "string" && value.length <= 2048 &&
+    /^#\/(?!\/)/.test(value) && !/[\\\u0000-\u0020\u007f]/.test(value) &&
+    !/^#\/(login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(value)
+      ? value : null;
+}
+
 export function rememberRegistration() {
   const hash = window.location.hash;
   const query = new URLSearchParams(hash.split("?")[1] || "");
   const requested = query.get("returnTo") || safeSessionStorage.getItem("imsop:return-to") || hash;
-  const route = requested.startsWith("#/") && !requested.startsWith("#//") &&
-    !/[\\\u0000-\u0020]/.test(requested) && requested.length <= 2048 &&
-    !/^#\/(login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(requested) ? requested : "#/";
-  safeSessionStorage.setItem(registrationKey, route);
+  safeSessionStorage.setItem(registrationKey, workspaceDestination(requested) ?? "#/");
 }
 
 export function resumeRegistration() {

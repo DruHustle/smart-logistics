@@ -175,7 +175,9 @@ export default function Login() {
             <p role="alert" className="text-sm">
               {onesaResult === "link"
                 ? "This email already has a Logistics account. Enter its email and password below, then choose Link account with Onesa to confirm both accounts."
-                : onesaResult === "denied"
+                : onesaResult === "cancelled"
+                  ? "Onesa sign-in was cancelled. You can try again."
+                  : onesaResult === "denied"
                   ? "Your Onesa account needs approved Logistics access. Administrators must complete MFA."
                   : onesaResult === "unavailable"
                     ? "Onesa sign-in is temporarily unavailable. Please try again."

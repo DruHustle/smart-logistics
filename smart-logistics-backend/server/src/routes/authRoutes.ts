@@ -11,7 +11,7 @@ import {
   updateProfile,
   changePassword,
 } from "../controllers/authController";
-import { allowAnonymousSession, authenticate } from "../middleware/auth";
+import { allowAnonymousSession, authenticate, authenticateForLogout } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import { rateLimit } from "../middleware/rateLimit";
 import { z } from "zod";
@@ -55,7 +55,7 @@ router.post(
 router.get("/session", authenticate, sessionInfo);
 router.get("/session-state", allowAnonymousSession, sessionState);
 router.get("/me", authenticate, getCurrentUser);
-router.post("/logout", authenticate, logout);
+router.post("/logout", authenticateForLogout, logout);
 router.post(
   "/request-reset",
   authLimiter,
