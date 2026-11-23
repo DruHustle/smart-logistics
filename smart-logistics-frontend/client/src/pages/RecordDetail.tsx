@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ShipmentStock } from "@/components/ShipmentStock";
+import { ShipmentDriver } from "@/components/ShipmentDriver";
+import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
 import { ReadError, readSource, useData } from "@/contexts/DataContext";
 import { demoShipments, demoOrders, demoEvents } from "@/lib/demo-data";
@@ -40,6 +42,7 @@ export default function RecordDetail(props: Props) {
 }
 function Detail({ kind, id, tracking = false }: Props) {
   const { mode } = useData();
+  const { user } = useAuth();
   const [record, setRecord] = useState<Shipment | OperationalOrder | null>(
     null
   );
@@ -48,6 +51,7 @@ function Detail({ kind, id, tracking = false }: Props) {
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const [eventPage, setEventPage] = useState(0);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const query = useHashQuery();
   const returnTo = query.get("return");
   const back =
@@ -168,6 +172,14 @@ function Detail({ kind, id, tracking = false }: Props) {
       ) : (
         record && (
           <>
+            {kind === "shipments" && !tracking && mode === "live" &&
+              (user?.role === "admin" || user?.role === "engineer") && (
+                <details className="source-details"
+                  onToggle={event => setDispatchOpen(event.currentTarget.open)}>
+                  <summary>Driver assignment</summary>
+                  {dispatchOpen && <ShipmentDriver shipment={id} />}
+                </details>
+              )}
             {kind === "shipments" && mode === "live" && (
               <ShipmentStock shipment={id} />
             )}

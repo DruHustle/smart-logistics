@@ -19,6 +19,8 @@ All operational calls require a valid cookie/bearer session and provisioned work
 | GET `/api/operations/shipments/summary` | Same authorized filters, aggregate counts and original-promise metric definition |
 | GET `/api/operations/shipments/:id` | Scoped numeric ID; snapshot and projection provenance |
 | GET `/api/operations/shipments/:id/events` | Scoped event metadata, at most 100; no raw webhook payload |
+| GET `/api/operations/shipments/:id/driver-assignment` | Administrators and engineers can read the current assignment and page through active workspace members using `offset`. |
+| PUT `/api/operations/shipments/:id/driver-assignment` | Administrators and engineers send `Idempotency-Key` and `{driverId,expectedVersion}`. A `null` driver ID clears the assignment. |
 | GET `/api/operations/orders[/:id]` | Node numeric orders; admin/engineer/analyst; currency nullable |
 | GET `/api/operations/reports/access` | admin/analyst export permission |
 | GET `/api/operations/{shipments,orders}/export/report` | HTML, same filters, cap 10,000, escaped values and report metadata |
@@ -59,6 +61,8 @@ Supply-chain paths retain the `/supply-chain` gateway prefix and first-party Ver
 The implemented [forecast adapter contract](contracts/OPTIONAL_FORECAST_PROVIDER.md) describes source-observation import, bounded requests, strict response evidence and persisted scoped runs. It does not provision or invent an external model.
 
 Tracking-event reads expose only the stored event metadata plus `position: {lat,lng} | null` and normalized `status | null` from that specific event. Raw provider payloads remain private. Missing locations are never carried forward into historical replay; workspace/provider/tracking boundaries and the bounded event page remain enforced.
+
+Driver assignment is an internal dispatch record. New shipments and existing shipments with no assignment start at version zero. Every accepted change records the actor, version and timestamp, and retrying the same request does not append a second event. Concurrent edits require the caller to reload before retrying. Assignments cannot be changed after a shipment is delivered or cancelled. A disabled or departed member's name is withheld. Assignment grants no access and does not change provider tracking or delivery status.
 
 ## Shared Onesa account sessions
 

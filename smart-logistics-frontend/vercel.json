@@ -2,7 +2,8 @@
   "version": 2,
   "git": {
     "deploymentEnabled": {
-      "main": false
+      "main": false,
+      "feat/shipment-driver-assignment-20261123": false
     }
   },
   "rewrites": [

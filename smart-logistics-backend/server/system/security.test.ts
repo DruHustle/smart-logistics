@@ -32,6 +32,7 @@ export async function request(
   body?: unknown,
   cookie?: string,
   method = body === undefined ? "GET" : "POST",
+  headers?: Record<string, string>,
 ) {
   return fetch(base + path, {
     method,
@@ -39,6 +40,7 @@ export async function request(
       "X-Forwarded-For": `192.0.2.${++requestSequence}`,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(cookie ? { Cookie: cookie, Origin: "http://localhost:5173" } : {}),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -62,6 +64,72 @@ async function account(role = "user", workspaceId: string | null = null) {
   assert.equal(login.status, 200);
   return { row, cookie: login.headers.get("set-cookie")!.split(";")[0] };
 }
+
+test("dispatch driver assignments require an authorized workspace, persist changes and deduplicate retries", async () => {
+  const workspace = randomUUID(), otherWorkspace = randomUUID();
+  await connection.query(
+    "INSERT INTO workspaces(id,name) VALUES($1,'Dispatch fixture'),($2,'Other fixture')",
+    [workspace, otherWorkspace],
+  );
+  const engineer = await account("engineer", workspace);
+  const firstDriver = await account("user", workspace);
+  const secondDriver = await account("user", workspace);
+  const outsider = await account("user", otherWorkspace);
+  const { rows: [shipment, otherShipment] } = await connection.query(
+    `INSERT INTO shipments (workspace_id, provider, tracking_number, origin, destination)
+    VALUES ($1,'workspace-operator',$3,'Fixture origin','Fixture destination'),
+    ($2,'workspace-operator',$4,'Fixture origin','Fixture destination') RETURNING id`,
+    [workspace, otherWorkspace, randomUUID(), randomUUID()],
+  );
+  const endpoint = (id: number) => `/api/operations/shipments/${id}/driver-assignment`;
+  const read = (id = shipment.id, cookie = engineer.cookie) =>
+    request(endpoint(id), undefined, cookie);
+  const write = (
+    driverId: number | null, expectedVersion: number,
+    key = randomUUID(), id = shipment.id, cookie = engineer.cookie,
+  ) => request(endpoint(id), { driverId, expectedVersion }, cookie, "PUT", { "Idempotency-Key": key });
+
+  assert.equal((await request(endpoint(shipment.id))).status, 401);
+  assert.equal((await read(shipment.id, firstDriver.cookie)).status, 403);
+  assert.equal((await write(firstDriver.row.id, 0, randomUUID(), shipment.id, firstDriver.cookie)).status, 403);
+  assert.equal((await read(otherShipment.id)).status, 404);
+  assert.equal((await write(firstDriver.row.id, 0, randomUUID(), otherShipment.id)).status, 404);
+  const initial = await (await read()).json();
+  assert.equal(initial.assignment.driverId, null);
+  assert.equal(initial.assignment.version, 0);
+  assert.deepEqual(
+    initial.candidates.map((driver: { id: number }) => driver.id).sort((a: number, b: number) => a - b),
+    [engineer.row.id, firstDriver.row.id, secondDriver.row.id].sort((a, b) => a - b),
+  );
+  assert.equal((await write(outsider.row.id, 0)).status, 400);
+
+  const key = randomUUID();
+  assert.deepEqual(await (await write(firstDriver.row.id, 0, key)).json(), { version: 1, duplicate: false });
+  assert.deepEqual(await (await write(firstDriver.row.id, 0, key)).json(), { version: 1, duplicate: true });
+  assert.equal((await write(secondDriver.row.id, 0, key)).status, 409);
+  assert.equal((await (await read()).json()).assignment.driverId, firstDriver.row.id);
+
+  const twoEdits = await Promise.all([write(null, 1), write(secondDriver.row.id, 1)]);
+  assert.deepEqual(twoEdits.map(response => response.status).sort(), [200, 409]);
+  assert.equal((await (await read()).json()).assignment.version, 2);
+  assert.equal((await write(secondDriver.row.id, 2)).status, 200);
+  await connection.query("UPDATE users SET disabled=true WHERE id=$1", [secondDriver.row.id]);
+  const inactive = await (await read()).json();
+  assert.equal(inactive.assignment.driverId, null);
+  assert.equal(inactive.assignment.driverName, null);
+  assert.equal(inactive.assignment.driverUnavailable, true);
+  assert.equal((await write(secondDriver.row.id, 3)).status, 400);
+  assert.equal((await write(null, 3)).status, 200);
+  assert.equal((await (await read()).json()).assignment.driverUnavailable, false);
+  await connection.query("UPDATE shipments SET status='delivered' WHERE id=$1", [shipment.id]);
+  assert.equal((await (await read()).json()).editable, false);
+  assert.equal((await write(firstDriver.row.id, 4)).status, 409);
+  const audit = await connection.query(
+    "SELECT version,assigned_by FROM shipment_driver_assignments WHERE shipment_id=$1 ORDER BY version",
+    [shipment.id],
+  );
+  assert.deepEqual(audit.rows, [1, 2, 3, 4].map(version => ({ version, assigned_by: engineer.row.id })));
+});
 test("mail builder emits a single hash token and preserves configured query parameters", () => {
   const link = buildResetLink(
     "https://app.imsop.test/?campaign=help#/reset-password?lang=en&token=old",
