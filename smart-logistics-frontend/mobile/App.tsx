@@ -31,6 +31,54 @@ import {
 import { Receiving } from "./src/Receiving";
 import { OperatorRecords } from "./src/OperatorRecords";
 
+const sampleWorkflows = [
+  {
+    name: "Shipment tracking",
+    description: "See where a shipment is and what changed.",
+    example: "Sample shipment SL-204 · In transit · Left the depot at 08:40.",
+  },
+  {
+    name: "Inventory receiving",
+    description: "Check delivered quantities against a purchase order.",
+    example: "Sample order PO-301 · 12 cartons expected · 10 received.",
+  },
+  {
+    name: "Exception handling",
+    description: "Review a delay and record how it was resolved.",
+    example: "Sample delay · Replacement vehicle assigned · Delivery rescheduled for 16:00.",
+  },
+];
+
+function PublicPreview() {
+  const [selected, setSelected] = useState<string | null>(null);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.body}>
+        Supply chain teams track shipments, receive inventory and resolve delivery exceptions.
+      </Text>
+      {sampleWorkflows.map(workflow => {
+        const expanded = selected === workflow.name;
+        return (
+          <View key={workflow.name} style={styles.card}>
+            <Text style={styles.name}>{workflow.name}</Text>
+            <Text style={styles.body}>{workflow.description}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? `Hide sample ${workflow.name.toLowerCase()}` : `Show sample ${workflow.name.toLowerCase()}`}
+              accessibilityState={{ expanded }}
+              onPress={() => setSelected(expanded ? null : workflow.name)}
+              style={styles.sampleAction}
+            >
+              <Text style={styles.sampleActionText}>{expanded ? "Hide sample" : "Show sample"}</Text>
+            </Pressable>
+            {expanded && <Text style={styles.body}>{workflow.example}</Text>}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [destination, setDestination] = useState<string | null>(null);
@@ -195,7 +243,7 @@ export default function App() {
         >
           <Text style={styles.brand}>{title}</Text>
           <Text accessibilityRole="header" style={styles.heading}>
-            {record?.item.title ?? queue}
+            {token ? record?.item.title ?? queue : "Explore Smart Logistics"}
           </Text>
           {!!info && (
             <Text accessibilityLiveRegion="polite" style={styles.notice}>
@@ -218,6 +266,7 @@ export default function App() {
               />
               <Button title="Create an Onesa account" disabled={busy} onPress={() => void enroll("user")} />
               <Button title="Request administrator access" disabled={busy} onPress={() => void enroll("admin")} />
+              <PublicPreview />
             </View>
           ) : (
             <View style={styles.section}>
@@ -317,6 +366,13 @@ const styles = StyleSheet.create({
   body: { fontSize: 17, lineHeight: 25, color: "#30464e" },
   name: { fontSize: 19, fontWeight: "600", color: "#183740" },
   notice: { fontSize: 16, color: "#753923" },
+  sampleAction: {
+    minHeight: 44,
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 4,
+  },
+  sampleActionText: { fontSize: 16, fontWeight: "600", color: "#24555d" },
   card: {
     backgroundColor: "#fff",
     padding: 18,
