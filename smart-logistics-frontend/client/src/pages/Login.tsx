@@ -54,6 +54,8 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   const linkRequested = onesaEnabled && onesaResult === "link";
+  const showPublicPreview = hostedWorkspace && !onesaResult;
+  const SignInHeading = showPublicPreview ? "h2" : "h1";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +124,12 @@ export default function Login() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-black/50"
       />
+      {showPublicPreview && (
+        <PublicPreview
+          disabled={isLoading}
+          signIn={destination => void signInWithOnesa(false, destination)}
+        />
+      )}
       <Card className="w-full max-w-md glass-panel border-border relative z-10 animate-in fade-in zoom-in duration-500">
         {safeSessionStorage.getItem("imsop:session-expired") && (
           <p role="status" className="p-4 text-sm">
@@ -140,7 +148,9 @@ export default function Login() {
               <BrainCircuit className="w-7 h-7 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-semibold">Welcome to Smart Logistics</h1>
+          <SignInHeading className="text-2xl font-semibold">
+            Welcome to Smart Logistics
+          </SignInHeading>
           <CardDescription className="text-muted-foreground">
             Intelligent Multi-Cloud Supply Chain & Operations Platform
           </CardDescription>
@@ -373,9 +383,6 @@ export default function Login() {
           </div>
         </CardContent>
       </Card>
-      {hostedWorkspace && (
-        <PublicPreview disabled={isLoading} signIn={destination => void signInWithOnesa(false, destination)} />
-      )}
     </div>
   );
 }
