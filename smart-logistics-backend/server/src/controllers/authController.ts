@@ -9,6 +9,7 @@ import { getJwtSecret } from "../config/security";
 import { connection } from "../config/db";
 import { randomInt } from "node:crypto";
 import { queuePasswordReset } from "../services/resetDelivery";
+import { configuredBrowserLogout } from "../services/onesaIdentity";
 
 import { createSession, authCookieOptions } from "../services/authSession";
 
@@ -97,6 +98,10 @@ export const logout = async (req: AuthRequest, res: Response) => {
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       path: "/",
     });
+    if (!req.headers.authorization) {
+      const sharedLogout = configuredBrowserLogout();
+      if (sharedLogout) return res.json({ sharedLogout });
+    }
     res.status(204).end();
   } catch {
     res

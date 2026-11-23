@@ -64,6 +64,21 @@ export function authorizationUrl(
   return config.issuer + (config.managed ? "authorize?" : "/auth?") + params;
 }
 
+export function configuredBrowserLogout(): string | null {
+  const returnUrl = process.env.ONESA_IDENTITY_WEB_LOGOUT_RETURN_URL;
+  if (!returnUrl) return null;
+  try {
+    const config = identityConfig();
+    if (!config?.managed || returnUrl !== config.origin + "/") return null;
+    const url = new URL("oidc/logout", config.issuer);
+    url.searchParams.set("client_id", config.client);
+    url.searchParams.set("post_logout_redirect_uri", returnUrl);
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 const encoded = (value: string) =>
   new URLSearchParams({ x: value }).toString().slice(2);
 async function issuerPost(

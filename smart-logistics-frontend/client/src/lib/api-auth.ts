@@ -1,7 +1,7 @@
 import { API_ORIGIN } from "./api-origin";
 import { safeLocalStorage, safeSessionStorage } from "./storage";
 import { User, AuthResponse, IAuthService } from "./auth-types";
-import { hostedWorkspace } from "./portal-account";
+import { hostedWorkspace, workspaceDestination } from "./portal-account";
 
 const TOKEN_KEY = "imsop_token",
   USER_KEY = "imsop_user";
@@ -9,6 +9,21 @@ export { resolveApiOrigin as resolveAuthOrigin } from "./api-origin";
 const API_BASE = API_ORIGIN;
 // The wrapper already provides a memory fallback when browser storage is blocked.
 const getStorage = () => safeLocalStorage;
+
+export function browserLogoutDestination(value: unknown, origin: string): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const client = url.searchParams.get("client_id");
+    return url.origin === "https://auth.onesa.eu" && url.pathname === "/oidc/logout" &&
+      !url.username && !url.password && !url.hash &&
+      Array.from(url.searchParams.keys()).length === 2 &&
+      client && /^[\w-]{16,128}$/.test(client) &&
+      url.searchParams.get("post_logout_redirect_uri") === origin + "/" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 export class ApiAuthService implements IAuthService {
   private async fetchApi(path: string, opts: RequestInit = {}) {
@@ -64,11 +79,11 @@ export class ApiAuthService implements IAuthService {
     destination?: string
   ): Promise<void> {
     if (safeSessionStorage.getItem("imsop:signout-pending"))
-      await this.logout();
+      await this.logout(false);
     const current = destination ?? window.location.hash;
-    const returnTo = /^#\/(?!\/)/.test(current) &&
-      !/^#\/(?:login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(current)
-      ? current : safeSessionStorage.getItem("imsop:return-to") || "#/";
+    const retry = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("returnTo");
+    const returnTo = workspaceDestination(current) ?? workspaceDestination(retry) ??
+      workspaceDestination(safeSessionStorage.getItem("imsop:return-to")) ?? "#/";
     const { url } = await this.fetchApi("/api/auth/onesa/start", {
       method: "POST",
       body: JSON.stringify({
@@ -86,7 +101,7 @@ export class ApiAuthService implements IAuthService {
   async login(email: string, password: string): Promise<AuthResponse> {
     try {
       if (safeSessionStorage.getItem("imsop:signout-pending"))
-        await this.logout();
+        await this.logout(false);
       const { user } = await this.fetchApi("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
@@ -99,11 +114,15 @@ export class ApiAuthService implements IAuthService {
       return { success: false, error: e.message };
     }
   }
-  logout = async () => {
+  logout = async (endSharedSession = true) => {
     safeSessionStorage.setItem("imsop:signout-pending", "true");
     [TOKEN_KEY, USER_KEY].forEach(k => getStorage().removeItem(k));
-    await this.fetchApi("/api/auth/logout", { method: "POST" });
+    const { sharedLogout } = await this.fetchApi("/api/auth/logout", { method: "POST" });
     safeSessionStorage.removeItem("imsop:signout-pending");
+    if (endSharedSession) {
+      const url = browserLogoutDestination(sharedLogout, window.location.origin);
+      if (url) window.location.assign(url);
+    }
   };
   async getCurrentUser(): Promise<AuthResponse> {
     if (safeSessionStorage.getItem("imsop:signout-pending"))

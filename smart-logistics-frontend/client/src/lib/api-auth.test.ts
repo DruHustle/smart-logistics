@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiAuthService, resolveAuthOrigin } from './api-auth';
+import { ApiAuthService, browserLogoutDestination, resolveAuthOrigin } from './api-auth';
 
 describe('API authentication availability', () => {
   it('keeps root-hosted production sessions first-party while retaining Pages and development API origins', () => {
@@ -57,5 +57,30 @@ describe('API authentication availability', () => {
     window.history.replaceState(null, '', '#/login?mode=live');
     await expect(new ApiAuthService().startOnesa()).rejects.toThrow('Invalid Onesa sign-in destination');
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).returnTo).toBe('#/profile');
+  });
+
+  it('restores the callback retry destination and discards a foreign one', async () => {
+    const target = '#/supply-chain/shipments/123/tracking?view=events';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ url: 'http://invalid.example' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.replaceState(null, '', '#/login?onesa=cancelled&returnTo=' + encodeURIComponent(target));
+    await expect(new ApiAuthService().startOnesa()).rejects.toThrow('Invalid Onesa sign-in destination');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).returnTo).toBe(target);
+    window.history.replaceState(null, '', '#/login?onesa=cancelled&returnTo=' + encodeURIComponent('#//foreign.example'));
+    await expect(new ApiAuthService().startOnesa()).rejects.toThrow('Invalid Onesa sign-in destination');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).returnTo).toBe('#/');
+  });
+
+  it('permits only the Onesa logout endpoint with a return to this product', () => {
+    const origin = 'https://logistics.example.test';
+    const logout = 'https://auth.onesa.eu/oidc/logout?' + new URLSearchParams({
+      client_id: 'logistics-web-client',
+      post_logout_redirect_uri: origin + '/',
+    });
+    expect(browserLogoutDestination(logout, origin)).toBe(logout);
+    expect(browserLogoutDestination(logout.replace('auth.onesa.eu', 'other.example.test'), origin)).toBeNull();
+    expect(browserLogoutDestination(logout, 'https://other.example.test')).toBeNull();
+    expect(browserLogoutDestination(logout + '&federated=1', origin)).toBeNull();
+    expect(browserLogoutDestination('malformed', origin)).toBeNull();
   });
 });
