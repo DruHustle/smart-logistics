@@ -1,6 +1,7 @@
 import { mockAuthService } from "./auth";
 import { apiAuthService } from "./api-auth";
 import { safeLocalStorage } from "./storage";
+import { hostedWorkspace } from "./portal-account";
 
 const DEMO_DOMAINS = ["@dev.local", "@imsop.io", "@demo.local"];
 const MOCK_TOKEN_PREFIX = "mock_";
@@ -8,6 +9,12 @@ const TOKEN_KEY = "imsop_token";
 
 export const AuthServiceFactory = {
   getService: (email?: string, mode?: "live" | "demo") => {
+    if (hostedWorkspace) {
+      if (mode === "demo") throw new Error("Sample data does not require sign-in.");
+      if (safeLocalStorage.getItem(TOKEN_KEY)?.startsWith(MOCK_TOKEN_PREFIX))
+        mockAuthService.logout();
+      return apiAuthService;
+    }
     if (mode === "live") return apiAuthService;
     if (mode === "demo") return mockAuthService;
     if (email) {

@@ -134,6 +134,26 @@ test("logout, disabled accounts and role changes revoke captured cookies", async
     );
   }
 });
+
+test("the browser may check its session state without opening protected APIs", async () => {
+  const anonymous = await request("/api/auth/session-state");
+  assert.equal(anonymous.status, 200);
+  assert.match(anonymous.headers.get("cache-control") || "", /no-store/);
+  assert.deepEqual(await anonymous.json(), { user: null });
+  assert.equal((await request("/api/auth/me")).status, 401);
+
+  const { row, cookie } = await account();
+  const active = await request("/api/auth/session-state", undefined, cookie);
+  assert.deepEqual(await active.json(), {
+    user: { id: String(row.id), email: row.email, name: row.name, role: "user" },
+  });
+
+  assert.equal((await request("/api/auth/logout", {}, cookie)).status, 204);
+  const expired = await request("/api/auth/session-state", undefined, cookie);
+  assert.equal(expired.status, 200);
+  assert.deepEqual(await expired.json(), { user: null });
+  assert.equal((await request("/api/auth/me", undefined, cookie)).status, 401);
+});
 test("short passwords fail before reset and unknown reset requests disclose no token", async () => {
   for (const newPassword of ["123456", "12345678901"])
     assert.equal(

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PublicPreview from "@/components/PublicPreview";
 import { BrainCircuit, Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { apiAuthService } from "@/lib/api-auth";
 import { useEffect, useState } from "react";
@@ -88,11 +89,12 @@ export default function Login() {
     if (onesaEnabled && resumeRegistration()) void signInWithOnesa();
   }, [onesaEnabled]);
 
-  async function signInWithOnesa(link = false) {
+  async function signInWithOnesa(link = false, destination?: string) {
     setIsLoading(true);
     try {
       await apiAuthService.startOnesa(
-        link ? { email: email.trim(), password } : undefined
+        link ? { email: email.trim(), password } : undefined,
+        destination
       );
     } catch (error) {
       toast.error(
@@ -111,7 +113,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-background bg-cover bg-center p-4 relative"
+      className="min-h-screen flex flex-col gap-5 items-center justify-center bg-background bg-cover bg-center p-4 relative"
       style={{
         backgroundImage: `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`,
       }}
@@ -328,7 +330,7 @@ export default function Login() {
             )}
           </div>
 
-          <details
+          {!hostedWorkspace && <details
             open={!liveRequested}
             className="rounded-md border border-border p-3"
           >
@@ -362,13 +364,16 @@ export default function Login() {
                 </Button>
               ))}
             </div>
-          </details>
+          </details>}
 
           <div className="mt-6 text-center text-xs text-muted-foreground">
             <p>Account access through Onesa Company Portal</p>
           </div>
         </CardContent>
       </Card>
+      {hostedWorkspace && (
+        <PublicPreview disabled={isLoading} signIn={destination => void signInWithOnesa(false, destination)} />
+      )}
     </div>
   );
 }
