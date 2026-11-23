@@ -144,7 +144,9 @@ test("a hosted visitor filters synthetic shipments and opens Onesa at the select
     if (url.pathname === "/api/auth/onesa/config")
       return route.fulfill({ json: { enabled: true } });
     if (url.pathname === "/api/auth/onesa/start") {
-      expect(route.request().postDataJSON()).toEqual({ returnTo: "#/supply-chain/shipments" });
+      expect(route.request().postDataJSON()).toEqual({
+        returnTo: "#/supply-chain/shipments?status=Delayed",
+      });
       return route.fulfill({ json: { url: "https://identity.example.test/authorize" } });
     }
     if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 401 });
@@ -157,7 +159,18 @@ test("a hosted visitor filters synthetic shipments and opens Onesa at the select
   );
 
   await page.goto(hosted);
-  await expect(page.getByRole("heading", { name: "Explore Smart Logistics" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Explore Smart Logistics");
+  for (const name of [
+    "Operational overview",
+    "Shipment tracking",
+    "Order management",
+    "Logistics analytics",
+    "Exception review",
+    "Logistics assistant",
+  ]) {
+    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Sign in for ${name.toLowerCase()}` })).toBeVisible();
+  }
   await expect(page.getByText("Demo accounts", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   await page.getByText("Explore with sample data", { exact: true }).click();
