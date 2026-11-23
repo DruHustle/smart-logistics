@@ -16,11 +16,16 @@ export interface AuthenticatedUser {
 export interface AuthRequest extends Request {
   user?: AuthenticatedUser;
 }
-export const authenticate = async (
+const verifySession = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction,
+  allowAnonymous: boolean,
 ) => {
+  const expired = (error: string) =>
+    allowAnonymous
+      ? next()
+      : res.status(401).json({ error, code: "SESSION_EXPIRED" });
   const cookie = req.headers.cookie
     ?.split(";")
     .map((v) => v.trim())
@@ -31,9 +36,7 @@ export const authenticate = async (
       ? req.headers.authorization.match(/^Bearer (\S+)$/i)?.[1]
       : cookie;
   if (!token)
-    return res
-      .status(401)
-      .json({ error: "Sign in required", code: "SESSION_EXPIRED" });
+    return expired("Sign in required");
   let claims: jwt.JwtPayload;
   try {
     const decoded = jwt.verify(token, getJwtSecret(), {
@@ -51,10 +54,7 @@ export const authenticate = async (
       throw new Error();
     claims = decoded;
   } catch {
-    return res.status(401).json({
-      error: "Your session expired. Sign in again.",
-      code: "SESSION_EXPIRED",
-    });
+    return expired("Your session expired. Sign in again.");
   }
   try {
     const result = await connection.query(
@@ -67,10 +67,7 @@ export const authenticate = async (
     );
     const row = result.rows[0];
     if (!row)
-      return res.status(401).json({
-        error: "Your session expired. Sign in again.",
-        code: "SESSION_EXPIRED",
-      });
+      return expired("Your session expired. Sign in again.");
     if (!row.onesa_token && (process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true"))
       throw new InactiveIdentity();
     if (row.onesa_token !== null && row.onesa_token !== undefined) {
@@ -100,11 +97,17 @@ export const authenticate = async (
       } catch {
         return res.status(503).json({ error: "Session verification unavailable" });
       }
-      return res.status(401).json({ error: "Your Onesa session expired. Sign in again.", code: "SESSION_EXPIRED" });
+      return expired("Your Onesa session expired. Sign in again.");
     }
     res.status(503).json({ error: "Session verification unavailable" });
   }
 };
+export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) =>
+  verifySession(req, res, next, false);
+
+export const allowAnonymousSession = (req: AuthRequest, res: Response, next: NextFunction) =>
+  verifySession(req, res, next, true);
+
 export const requireWorkspace = (
   req: AuthRequest,
   res: Response,

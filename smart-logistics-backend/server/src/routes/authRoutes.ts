@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   sessionInfo,
+  sessionState,
   login,
   logout,
   register,
@@ -10,7 +11,7 @@ import {
   updateProfile,
   changePassword,
 } from "../controllers/authController";
-import { authenticate } from "../middleware/auth";
+import { allowAnonymousSession, authenticate } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import { rateLimit } from "../middleware/rateLimit";
 import { z } from "zod";
@@ -52,6 +53,7 @@ router.post(
   register,
 );
 router.get("/session", authenticate, sessionInfo);
+router.get("/session-state", allowAnonymousSession, sessionState);
 router.get("/me", authenticate, getCurrentUser);
 router.post("/logout", authenticate, logout);
 router.post(

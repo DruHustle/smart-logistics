@@ -81,6 +81,10 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
 
 export const sessionInfo = (req: AuthRequest, res: Response) =>
   res.json(req.user);
+
+export const sessionState = (req: AuthRequest, res: Response) =>
+  req.user ? getCurrentUser(req, res) : res.json({ user: null });
+
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
     await connection.query(
