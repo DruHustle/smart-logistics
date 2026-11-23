@@ -1,5 +1,6 @@
 import {createOperatorShipment,operatorShipmentInput,shipmentProviders} from "../controllers/operatorShipment";
 import { assignShipmentDriver, shipmentDriver, shipmentDriverInput } from "../controllers/shipmentDriver";
+import { getShipmentQuotes, saveShipmentQuote, shipmentQuoteInput } from "../controllers/shipmentQuotes";
 import { Router } from "express";
 import { sapMetadata } from "../controllers/integrations";
 import {
@@ -135,6 +136,15 @@ router.put(
   "/shipments/:id/driver-assignment",
   authenticate, requireWorkspace, authorize(["admin", "engineer"]),
   validateBody(shipmentDriverInput), assignShipmentDriver,
+);
+router.get(
+  "/shipments/:id/quotes",
+  authenticate, requireWorkspace, authorize(["admin", "engineer"]), getShipmentQuotes,
+);
+router.post(
+  "/shipments/:id/quotes",
+  authenticate, requireWorkspace, authorize(["admin", "engineer"]),
+  validateBody(shipmentQuoteInput), saveShipmentQuote,
 );
 router.get(
   "/shipments/:id",

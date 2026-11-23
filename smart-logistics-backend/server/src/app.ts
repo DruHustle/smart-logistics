@@ -111,14 +111,16 @@ app.get("/health", (_req, res) => {
 app.get("/ready", async (_req, res) => {
   try {
     const ledger = await db.execute(
-      sql`SELECT name FROM schema_migrations WHERE name IN ('007_immutable_mail.sql', '008_node_red_package_management.sql', '009_onesa_identity.sql', '010_session_token_issuer.sql', '012_shared_registration_roles.sql', ${release.nodeSchema}) AND checksum IS NOT NULL`,
+      sql`SELECT name FROM schema_migrations WHERE name IN ('007_immutable_mail.sql', '008_node_red_package_management.sql', '009_onesa_identity.sql', '010_session_token_issuer.sql', '012_shared_registration_roles.sql', '013_shipment_driver_assignments.sql', ${release.nodeSchema}) AND checksum IS NOT NULL`,
     );
     // Every runtime dependency must have a completed migration.
-    if (ledger.rowCount !== 6)
+    if (ledger.rowCount !== 7)
       return res.status(503).json({ status: "schema_not_ready", ...release });
     const privileges = await db.execute(sql`
-      SELECT has_table_privilege(to_regclass('public.shipment_driver_assignments'), 'SELECT')
-        AND has_table_privilege(to_regclass('public.shipment_driver_assignments'), 'INSERT') AS allowed
+      SELECT bool_and(coalesce(has_table_privilege(to_regclass(relation), 'SELECT')
+        AND has_table_privilege(to_regclass(relation), 'INSERT'), false)) AS allowed
+      FROM (VALUES ('public.shipment_driver_assignments'), ('public.shipment_quotes'),
+        ('public.shipment_quote_selections')) AS runtime_tables(relation)
     `);
     if (privileges.rows[0]?.allowed !== true)
       return res.status(503).json({ status: "schema_not_ready", ...release });

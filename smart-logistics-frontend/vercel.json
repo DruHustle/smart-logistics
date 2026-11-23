@@ -3,7 +3,8 @@
   "git": {
     "deploymentEnabled": {
       "main": false,
-      "feat/shipment-driver-assignment-20261123": false
+      "feat/shipment-driver-assignment-20261123": false,
+      "feat/shipment-quote-selection-20261123": false
     }
   },
   "rewrites": [
