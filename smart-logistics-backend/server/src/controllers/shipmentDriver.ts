@@ -97,21 +97,19 @@ export async function assignShipmentDriver(req: AuthRequest, res: Response) {
     );
     if ((current?.version ?? 0) !== expectedVersion)
       return await stop(409, "The assignment changed. Reload it before saving.");
-    if (driverId !== null) {
-      const allowed = await tx.query(
-        `SELECT 1 FROM workspace_memberships m JOIN users u ON u.id=m.user_id
-        WHERE m.workspace_id=$1 AND m.user_id=$2 AND NOT u.disabled FOR SHARE OF m,u`,
-        [user.workspaceId, driverId],
-      );
-      if (!allowed.rowCount) return await stop(400, "Choose an active member of this workspace.");
-    }
     const version = expectedVersion + 1;
-    await tx.query(
+    // Evaluate membership in the write snapshot using read-only directory access.
+    const inserted = await tx.query(
       `INSERT INTO shipment_driver_assignments
         (workspace_id,shipment_id,version,driver_id,assigned_by,request_id)
-        VALUES($1,$2,$3,$4,$5,$6)`,
+      SELECT $1,$2,$3,$4,$5,$6
+      WHERE $4::integer IS NULL OR EXISTS (
+        SELECT 1 FROM workspace_memberships m JOIN users u ON u.id=m.user_id
+        WHERE m.workspace_id=$1 AND m.user_id=$4 AND NOT u.disabled
+      )`,
       [user.workspaceId, id, version, driverId, user.id, key.data],
     );
+    if (!inserted.rowCount) return await stop(400, "Choose an active member of this workspace.");
     await tx.query("COMMIT");
     return res.json({ version, duplicate: false });
   } catch {

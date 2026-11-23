@@ -116,6 +116,12 @@ app.get("/ready", async (_req, res) => {
     // Every runtime dependency must have a completed migration.
     if (ledger.rowCount !== 6)
       return res.status(503).json({ status: "schema_not_ready", ...release });
+    const privileges = await db.execute(sql`
+      SELECT has_table_privilege(to_regclass('public.shipment_driver_assignments'), 'SELECT')
+        AND has_table_privilege(to_regclass('public.shipment_driver_assignments'), 'INSERT') AS allowed
+    `);
+    if (privileges.rows[0]?.allowed !== true)
+      return res.status(503).json({ status: "schema_not_ready", ...release });
     res.json({ status: "ready", ...release });
   } catch {
     res.status(503).json({ status: "not_ready" });
