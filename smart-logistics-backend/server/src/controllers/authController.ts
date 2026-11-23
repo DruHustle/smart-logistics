@@ -88,9 +88,9 @@ export const sessionState = (req: AuthRequest, res: Response) =>
 
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
-    await connection.query(
-      "UPDATE auth_sessions SET revoked_at=now(),onesa_token=NULL WHERE id=$1",
-      [req.user!.sessionId],
+    const {rows:[revoked]} = await connection.query(
+      "UPDATE auth_sessions SET revoked_at=now(),onesa_token=NULL WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING onesa_token_issuer",
+      [req.user!.sessionId, req.user!.id],
     );
     res.clearCookie("imsop_access", {
       httpOnly: true,
@@ -98,7 +98,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       path: "/",
     });
-    if (!req.headers.authorization) {
+    if (!req.headers.authorization && revoked?.onesa_token_issuer === "https://auth.onesa.eu/") {
       const sharedLogout = configuredBrowserLogout();
       if (sharedLogout) return res.json({ sharedLogout });
     }

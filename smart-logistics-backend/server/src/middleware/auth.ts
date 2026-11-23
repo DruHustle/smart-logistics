@@ -20,7 +20,10 @@ const verifySession = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction,
-  allowAnonymous: boolean,
+  { allowAnonymous = false, verifyOnesaGrant = true }: {
+    allowAnonymous?: boolean;
+    verifyOnesaGrant?: boolean;
+  } = {},
 ) => {
   const expired = (error: string) =>
     allowAnonymous
@@ -68,9 +71,9 @@ const verifySession = async (
     const row = result.rows[0];
     if (!row)
       return expired("Your session expired. Sign in again.");
-    if (!row.onesa_token && (process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true"))
+    if (verifyOnesaGrant && !row.onesa_token && (process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true"))
       throw new InactiveIdentity();
-    if (row.onesa_token !== null && row.onesa_token !== undefined) {
+    if (verifyOnesaGrant && row.onesa_token !== null && row.onesa_token !== undefined) {
       const config = identityConfig();
       if (!config) throw new InactiveIdentity();
       if (config.issuer !== (row.onesa_token_issuer ?? row.onesa_issuer)) throw new InactiveIdentity();
@@ -103,10 +106,14 @@ const verifySession = async (
   }
 };
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) =>
-  verifySession(req, res, next, false);
+  verifySession(req, res, next);
 
 export const allowAnonymousSession = (req: AuthRequest, res: Response, next: NextFunction) =>
-  verifySession(req, res, next, true);
+  verifySession(req, res, next, { allowAnonymous: true });
+
+// This path only revokes the verified local session. The issuer can be offline.
+export const authenticateForLogout = (req: AuthRequest, res: Response, next: NextFunction) =>
+  verifySession(req, res, next, { verifyOnesaGrant: false });
 
 export const requireWorkspace = (
   req: AuthRequest,
