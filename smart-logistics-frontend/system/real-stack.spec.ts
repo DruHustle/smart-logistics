@@ -265,7 +265,7 @@ test("exact backend mail link works during demo identity, is scrubbed, survives 
   ).toBeVisible();
 });
 
-test("actual browser loads beyond 500, finds the old delayed record and exports the same authorized filter", async ({
+test("actual browser loads beyond 500, finds the old delayed record and exports the same authorized filter", { tag: "@shipment-pagination" }, async ({
   page,
 }) => {
   const scale = JSON.parse(
