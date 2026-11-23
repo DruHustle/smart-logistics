@@ -89,8 +89,14 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const submitting = useRef(false);
-  const safeError = (e: unknown) =>
-    setInfo(e instanceof Error ? e.message : "Please try again.");
+  const safeError = (e: unknown) => {
+    if (!(e instanceof Error)) return setInfo("Please try again.");
+    if (e.message === "onesa_denied")
+      return setInfo("Onesa sign-in was cancelled. You can try again.");
+    if (e.message === "unauthorized")
+      return setInfo("This Onesa sign-in attempt expired. Please try again.");
+    setInfo(e.message);
+  };
   function fail(e: unknown) {
     if (e instanceof SessionExpired) {
       setToken(null);

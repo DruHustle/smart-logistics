@@ -3,8 +3,71 @@ import assert from "node:assert/strict";
 import {
   PendingOnesaTransactions,
   nativeCode,
+  ownsNativeCallback,
+  receiveBrowserCallback,
   type PendingOnesa,
 } from "../src/callback";
+
+test("an iOS browser dismissal retains the transaction for a following OS callback", async () => {
+  const client = "eu.onesa.logistics://signin/callback";
+  const pending: PendingOnesa = {
+    issuer: "https://auth.onesa.eu/",
+    origin: "https://logistics.example.test",
+    expires: Date.now() + 300_000,
+    verifier: "device-only",
+    state: "current-attempt",
+    destination: "17",
+  };
+  let listener: (url: string) => void = () => {};
+  let removed = false;
+  const match = `${client}?code=verified-test-code&state=${pending.state}`;
+  const ready = receiveBrowserCallback(
+    async () => ({ type: "cancel" }),
+    receive => {
+      listener = receive;
+      return () => { removed = true; };
+    },
+    url => ownsNativeCallback(url, pending),
+    100,
+  );
+  listener(match.replace(pending.state, "stale-attempt"));
+  setTimeout(() => listener(match), 0);
+  assert.equal(await ready, match);
+  assert.equal(removed, true);
+});
+
+test("a dismissed browser with no accepted return stays signed out and releases the observer", async () => {
+  let removed = false;
+  const answer = await receiveBrowserCallback(
+    async () => ({ type: "dismiss" }),
+    receive => {
+      receive("eu.onesa.logistics://signin/callback?state=old");
+      return () => { removed = true; };
+    },
+    () => false,
+    1,
+  );
+  assert.equal(answer, null);
+  assert.equal(removed, true);
+});
+
+test("the app cannot treat a different browser result as completed sign-in or registration", async () => {
+  const registered = "eu.onesa.logistics://signin/registered";
+  const accepts = (value: string) => value === registered;
+  const subscribe = () => () => {};
+  await assert.rejects(receiveBrowserCallback(
+    async () => ({ type: "success", url: registered + "?unexpected" }),
+    subscribe,
+    accepts,
+    1,
+  ), /unauthorized/);
+  assert.equal(await receiveBrowserCallback(
+    async () => ({ type: "success", url: registered }),
+    subscribe,
+    accepts,
+    1,
+  ), registered);
+});
 
 test("an app return requires the original pending transaction, issuer, exact route and API", () => {
   const origin = "https://farmer-api.example.test",
