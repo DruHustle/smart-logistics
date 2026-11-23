@@ -152,14 +152,19 @@ router.get("/callback", async (req, res) => {
   const config = identityConfig();
   if (!config) return res.sendStatus(503);
   res.setHeader("Referrer-Policy", "no-referrer");
-  const retry = (reason: string) =>
-    res.redirect(303, config.origin + "/#/login?mode=live&onesa=" + reason);
+  const retry = (reason: string, returnTo = "#/") => {
+    const params = new URLSearchParams({ mode: "live", onesa: reason });
+    if (returnTo !== "#/") params.set("returnTo", returnTo);
+    return res.redirect(303, config.origin + "/#/login?" + params);
+  };
   const query = z
     .object({
       state: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-      code: z.string().min(1).max(4096),
+      code: z.string().min(1).max(4096).optional(),
+      error: z.string().regex(/^[a-z_]{1,64}$/).optional(),
       iss: z.literal(config.issuer).optional(),
     })
+    .refine(value => Boolean(value.code) !== Boolean(value.error))
     .safeParse(req.query);
   const browser = req.headers.cookie
     ?.split(";")
@@ -168,6 +173,7 @@ router.get("/callback", async (req, res) => {
     ?.split("=")[1];
   if (!query.success || !browser || !/^[A-Za-z0-9_-]{43}$/.test(browser))
     return retry("restart");
+  let returnTo = "#/";
   try {
     const {
       rows: [txn],
@@ -179,9 +185,11 @@ router.get("/callback", async (req, res) => {
     res.clearCookie(transactionCookie, cookieOptions);
     const encodedReturn = req.headers.cookie?.split(";").map(v => v.trim())
       .find(v => v.startsWith(returnCookie + "="))?.slice(returnCookie.length + 1);
-    let returnTo = "#/";
     try { returnTo = safeReturnPath(decodeURIComponent(encodedReturn ?? "")); } catch {}
     res.clearCookie(returnCookie, cookieOptions);
+    if (!query.data.code) {
+      return retry(query.data.error === "access_denied" ? "cancelled" : "unavailable", returnTo);
+    }
     const {token, identity} = await exchangeCode(config, query.data.code, txn.verifier);
     const email = identity.email.toLowerCase();
     if (txn.link_user_id !== null) {
@@ -190,11 +198,11 @@ router.get("/callback", async (req, res) => {
          AND NOT disabled AND onesa_subject IS NULL`,
         [identity.iss, identity.sub, txn.link_user_id, email, txn.link_version],
       );
-      if (!updated.rowCount) return retry("link");
+      if (!updated.rowCount) return retry("link", returnTo);
     }
     const user = await registrationAccount(identity);
-    if (!user) return retry("link");
-    if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied");
+    if (!user) return retry("link", returnTo);
+    if (user.disabled || (user.role === "admin" && identity.onesa_product_roles.logistics !== "admin")) return retry("denied", returnTo);
     res.cookie(
       "imsop_access",
       await createSession(user, sealToken(token), config.issuer),
@@ -202,7 +210,7 @@ router.get("/callback", async (req, res) => {
     );
     return res.redirect(303, config.origin + "/" + returnTo);
   } catch (error) {
-    return retry(error instanceof InactiveIdentity ? "denied" : "unavailable");
+    return retry(error instanceof InactiveIdentity ? "denied" : "unavailable", returnTo);
   }
 });
 export default router;

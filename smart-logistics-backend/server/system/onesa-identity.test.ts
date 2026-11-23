@@ -57,6 +57,7 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
   };
   const token = "opaque-integration-token-" + randomUUID();
   let challenge = "";
+  let portalOnline = true;
   t.mock.method(globalThis, "fetch", async (url: string, opts: RequestInit) => {
     assert.equal(
       new Headers(opts.headers).get("Authorization"),
@@ -64,6 +65,7 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
     );
     if (url === issuer + "/session") {
       assert.deepEqual(JSON.parse(String(opts.body)), { token });
+      if (!portalOnline) return Response.json({}, { status: 503 });
       return Response.json(claims);
     }
     assert.equal(url, issuer + "/token");
@@ -170,4 +172,15 @@ test("One Onesa login creates a scoped Logistics session, checks live grants and
   assert.equal(localView.role, "analyst", "Federation must preserve the linked account's locally assigned role even when the live Portal grant is an MFA administrator");
   assert.equal((await http(root + "/api/operations/shipment-providers", { headers: { Origin: origin, Cookie: linkedCookie } })).status, 403, "A central administrator claim must not elevate the linked Logistics analyst to an engineer or administrator");
   assert.equal((await connection.query("SELECT role FROM users WHERE id=$1", [local.id])).rows[0].role, "analyst", "Federation must preserve the linked account's stored local role");
+  const retainedCookie = (await callback(await start())).headers.getSetCookie()
+    .find((c) => c.startsWith("imsop_access="))!.split(";")[0];
+  portalOnline = false;
+  const localAuth = { Origin: origin, Cookie: linkedCookie };
+  assert.equal((await http(root + "/api/auth/session", { headers: localAuth })).status, 503);
+  const logout = await http(root + "/api/auth/logout", { method: "POST", headers: localAuth });
+  assert.equal(logout.status, 204);
+  assert.ok(logout.headers.getSetCookie().some((c) => c.startsWith("imsop_access=;")));
+  portalOnline = true;
+  assert.equal((await http(root + "/api/auth/session", { headers: localAuth })).status, 401);
+  assert.equal((await http(root + "/api/auth/session", { headers: { Cookie: retainedCookie } })).status, 200);
 });

@@ -30,10 +30,12 @@ test("managed web and native first use, tier changes, scoped shipments and offli
   await connection.query("INSERT INTO workspace_memberships(user_id,workspace_id) VALUES($1,$2)",[user.id,workspace]);
   const shipments=(await connection.query("INSERT INTO shipments(workspace_id,tracking_number,origin,destination,status) VALUES($1,$2,'A','B','delayed'),($3,$4,'C','D','delayed') RETURNING id",[workspace,randomUUID(),other,randomUUID()])).rows;
   let nonce="",online=true,role="user",products=["logistics"],aud=audience,expiry=180,nonceOverride="";
+  let loginAttempts=0, exchanges=0;
   const sign=(claims:object,audience:string,seconds:number)=>jwt.sign({...claims,iat:Math.floor(Date.now()/1000)-age},privateKey,{algorithm:"RS256",keyid:"fixture",issuer,subject,audience,expiresIn:seconds});
   globalThis.fetch=async(input,init)=>{
     if(String(input).startsWith(base+"/"))return original(input,init);
     if(String(input)!==issuer+"oauth/token")throw Error("Unexpected service dependency");
+    exchanges++;
     if(!online)return Response.json({}, {status:503});
     const publicClient = (init?.body as URLSearchParams)?.get("client_id");
     const selected = publicClient || client;
@@ -48,16 +50,47 @@ test("managed web and native first use, tier changes, scoped shipments and offli
   };
   const get=(path:string,cookie="")=>fetch(base+path,{redirect:"manual",headers:{Origin:origin,Cookie:cookie}});
   const destination="#/supply-chain/shipments/"+shipments[0].id+"/tracking";
-  const callback=async()=>{
-    const started=await fetch(base+"/api/auth/onesa/start",{method:"POST",headers:{Origin:origin,"Content-Type":"application/json"},body:JSON.stringify({returnTo:destination})});
+  const start=async()=>{
+    const started=await fetch(base+"/api/auth/onesa/start",{method:"POST",headers:{Origin:origin,"Content-Type":"application/json","X-Forwarded-For":`198.51.100.${++loginAttempts}`},body:JSON.stringify({returnTo:destination})});
+    assert.equal(started.status,200);
     const url=new URL((await started.json()).url);
     assert.equal(url.origin+url.pathname,issuer+"authorize");assert.equal(url.searchParams.get("audience"),audience);
     assert.equal(url.searchParams.get("code_challenge_method"),"S256");nonce=url.searchParams.get("nonce")!;
     const cookies=started.headers.getSetCookie().map(c=>c.split(";")[0]).join("; ");
-    return get("/api/auth/onesa/callback?code=fixture&state="+url.searchParams.get("state"),cookies);
+    return {state:url.searchParams.get("state"),cookies};
   };
+  const callback=async()=>{
+    const {state,cookies}=await start();
+    return get("/api/auth/onesa/callback?code=fixture&state="+state,cookies);
+  };
+  const retry=(response:Response,reason:string,returnTo=destination)=>{
+    assert.equal(response.status,303);
+    const target=new URL(response.headers.get("location")!);
+    assert.equal(target.origin,origin);
+    assert.equal(target.hash.split("?")[0],"#/login");
+    const params=new URLSearchParams(target.hash.split("?")[1]);
+    assert.equal(params.get("onesa"),reason);
+    assert.equal(params.get("returnTo"),returnTo || null);
+    assert.ok(!response.headers.getSetCookie().some(c=>c.startsWith("imsop_access=")));
+  };
+  const attempt=await start(), exchangesBeforeCancellation=exchanges;
+  const deniedPath="/api/auth/onesa/callback?error=access_denied&state="+attempt.state;
+  retry(await get(deniedPath,attempt.cookies),"cancelled");
+  retry(await get(deniedPath,attempt.cookies),"restart","");
+  assert.equal(exchanges,exchangesBeforeCancellation);
   const signIn=async()=>{const cb=await callback();assert.equal(cb.headers.get("location"),origin+"/"+destination);return cb.headers.getSetCookie().find(v=>v.startsWith("imsop_access="))!.split(";")[0];};
   const session=await signIn();assert.equal((await (await get("/api/auth/me",session)).json()).user.id,String(user.id));
+  process.env.ONESA_IDENTITY_WEB_LOGOUT_RETURN_URL=origin+"/";
+  t.after(()=>{delete process.env.ONESA_IDENTITY_WEB_LOGOUT_RETURN_URL;});
+  const signedOutCookie=await signIn();
+  const logout=await fetch(base+"/api/auth/logout",{method:"POST",headers:{Origin:origin,Cookie:signedOutCookie}});
+  assert.equal(logout.status,200);
+  assert.ok(logout.headers.getSetCookie().some(c=>c.startsWith("imsop_access=;")));
+  const logoutUrl=new URL((await logout.json()).sharedLogout);
+  assert.equal(logoutUrl.origin+logoutUrl.pathname,issuer+"oidc/logout");
+  assert.equal(logoutUrl.searchParams.get("client_id"),client);
+  assert.equal(logoutUrl.searchParams.get("post_logout_redirect_uri"),origin+"/");
+  assert.equal((await get("/api/auth/me",signedOutCookie)).status,401);
   const shipment="/api/operations/shipments/";
   assert.equal((await get(shipment+shipments[0].id,session)).status,200);
   assert.equal((await get(shipment+shipments[1].id,session)).status,404);
@@ -77,9 +110,9 @@ test("managed web and native first use, tier changes, scoped shipments and offli
   assert.ok((await (await fetch(path+"/actions",{headers:auth})).json()).items.some((a:{action:string})=>a.action==="resolve"));
   nonceOverride="invalid";assert.equal((await nativeExchange()).status,401);nonceOverride="";
   role="admin";const staff=await signIn();assert.equal((await (await get("/api/auth/me",staff)).json()).user.role,"engineer");
-  role="user";products=[];assert.match((await callback()).headers.get("location")!,/onesa=denied$/);
-  products=["logistics"];aud="https://api.other.example";assert.match((await callback()).headers.get("location")!,/onesa=denied$/);aud=audience;
-  nonceOverride="incorrect";assert.match((await callback()).headers.get("location")!,/onesa=denied$/);nonceOverride="";
+  role="user";products=[];retry(await callback(),"denied");
+  products=["logistics"];aud="https://api.other.example";retry(await callback(),"denied");aud=audience;
+  nonceOverride="incorrect";retry(await callback(),"denied");nonceOverride="";
   const linked = {stable, subject, email};
   const useNewAccount = (label:string) => {
     stable=randomUUID(); subject="auth0|"+label; email=label+"@example.test";
@@ -125,7 +158,7 @@ test("managed web and native first use, tier changes, scoped shipments and offli
   // Matching email is never ownership proof. Stale admin MFA cannot create a row.
   useNewAccount("new-collision"); email="pilot@example.test";
   assert.equal((await nativeExchange()).status,403);
-  assert.match((await callback()).headers.get("location")!,/onesa=link$/);
+  retry(await callback(),"link");
   useNewAccount("ambiguous-product"); products=["logistics","unrelated"];
   assert.equal((await nativeExchange()).status,401); products=["logistics"];
   useNewAccount("stale-mfa"); factorAge=301;
@@ -134,7 +167,10 @@ test("managed web and native first use, tier changes, scoped shipments and offli
   ({stable,subject,email}=linked);role="user";factorAge=0;
   expiry=2;const short=await signIn();online=false;
   assert.equal((await get(shipment+shipments[0].id,session)).status,200);
-  assert.match((await callback()).headers.get("location")!,/onesa=unavailable$/);
+  retry(await callback(),"unavailable");
+  const nativeLogout=await fetch(base+"/api/auth/logout",{method:"POST",headers:auth});
+  assert.equal(nativeLogout.status,204);
+  assert.equal((await fetch(base+"/api/auth/me",{headers:auth})).status,401);
   await new Promise(r=>setTimeout(r,2100));assert.equal((await get(shipment+shipments[0].id,short)).status,401);
   assert.equal((await connection.query("SELECT count(*) FROM users WHERE onesa_subject=$1",[stable])).rows[0].count,"1");
 });
