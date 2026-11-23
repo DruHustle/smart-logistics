@@ -221,29 +221,38 @@ test("hosted Logistics discards a previous browser demo session on an administra
   ]);
 });
 
-for (const audience of ["user", "admin"]) {
-  test("Identity returns a Logistics " + audience + " to the tracked shipment", async ({page,baseURL})=>{
-    const hosted="https://logistics.example.invalid";
-    await page.route(hosted+"/**",async route=>{
+for (const [audience, newTab] of [["user",false],["admin",false],["user",true]] as const) {
+  const title = newTab ? "Identity returns Logistics signup to the workspace in a fresh tab"
+    : "Identity returns a Logistics " + audience + " to the tracked shipment";
+  test(title, async ({context,page,baseURL})=>{
+    await page.unrouteAll();
+    await context.route(/^https:\/\//, route => route.abort());
+    const hostedUrl = new URL(baseURL);
+    hostedUrl.hostname = "logistics.localhost";
+    const hosted = hostedUrl.origin;
+    await context.route(hosted+"/api/**",route=>{
       const url=new URL(route.request().url());
       if(url.pathname==="/api/auth/onesa/config") return route.fulfill({json:{enabled:true}});
+      if(url.pathname==="/api/auth/session-state") return route.fulfill({json:{user:null}});
       if(url.pathname==="/api/auth/onesa/start"){
-        expect(route.request().postDataJSON()).toEqual({returnTo:"#/supply-chain/shipments/123/tracking"});
+        expect(route.request().postDataJSON()).toEqual({returnTo:newTab ? "#/" : "#/supply-chain/shipments/123/tracking"});
         return route.fulfill({json:{url:"https://identity.example.test/authorize"}});
       }
-      if(url.pathname.startsWith("/api/")) return route.fulfill({status:401,json:{}});
-      const asset=await page.request.get(new URL(url.pathname+url.search,baseURL).href);
-      return route.fulfill({response:asset});
+      return route.fulfill({status:401,json:{}});
     });
-    await page.route("https://account.onesa.eu/**",route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted+'/#/login?registration=complete">Back to Logistics</a>'}));
-    await page.route("https://identity.example.test/authorize",route=>route.fulfill({body:"Onesa sign-in"}));
+    const registration = "https://account.onesa.eu/register?audience="+audience+"&product=logistics&platform=web";
+    await context.route(registration,route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted+'/#/login?registration=complete"'+(newTab ? ' target="_blank" rel="noopener"' : '')+'>Back to Logistics</a>'}));
+    await context.route("https://identity.example.test/authorize",route=>route.fulfill({body:"Onesa sign-in"}));
     await page.goto(hosted+"/#/login?returnTo="+encodeURIComponent("#/supply-chain/shipments/123/tracking"));
     const entry = audience === "admin"
       ? page.getByRole("link", {name: "Request administrator access"})
       : page.getByRole("button", {name: "Sign Up", exact: true});
     await entry.click();
-    await expect(page).toHaveURL("https://account.onesa.eu/register?audience="+audience+"&product=logistics&platform=web");
-    await page.getByRole("link",{name:"Back to Logistics"}).click();
-    await expect(page).toHaveURL("https://identity.example.test/authorize");
+    await expect(page).toHaveURL(registration);
+    const [returned] = await Promise.all([
+      newTab ? context.waitForEvent("page") : page,
+      page.getByRole("link",{name:"Back to Logistics"}).click(),
+    ]);
+    await expect(returned).toHaveURL("https://identity.example.test/authorize");
   });
 }

@@ -3,10 +3,20 @@ import assert from "node:assert/strict";
 import {
   PendingOnesaTransactions,
   nativeCode,
+  nativeRegistrationDestination,
   ownsNativeCallback,
   receiveBrowserCallback,
   type PendingOnesa,
 } from "../src/callback";
+
+test("a late signup return preserves only a usable in-app destination", () => {
+  assert.equal(nativeRegistrationDestination('{"destination":"shipment-17","expires":1000}', 999), "shipment-17");
+  assert.equal(nativeRegistrationDestination('{"destination":"shipment-17","expires":1000}', 1000), undefined);
+  assert.equal(nativeRegistrationDestination('{"destination":null,"expires":1000}', 999), null);
+  assert.equal(nativeRegistrationDestination('{"destination":null}', 999), null);
+  assert.equal(nativeRegistrationDestination('{"destination":42,"expires":1000}', 999), undefined);
+  assert.equal(nativeRegistrationDestination("{", 999), undefined);
+});
 
 test("an iOS browser dismissal retains the transaction for a following OS callback", async () => {
   const client = "eu.onesa.logistics://signin/callback";
