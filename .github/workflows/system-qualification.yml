@@ -126,7 +126,15 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Real recovery, scoped reads, reviews, purchasing, receipts, mail and forecasts
         working-directory: smart-logistics-frontend
-        run: pnpm exec playwright test --config playwright.system.config.ts
+        run: pnpm exec playwright test --config playwright.system.config.ts --grep-invert @shipment-pagination
+      - name: Reset the disposable backend before the shipment scale journey
+        working-directory: smart-logistics-backend
+        run: |
+          docker compose -f server/system/compose.yaml restart backend
+          docker compose -f server/system/compose.yaml up -d --wait
+      - name: Read and filter 620 shipments through the real gateway
+        working-directory: smart-logistics-frontend
+        run: pnpm exec playwright test --config playwright.system.config.ts --grep @shipment-pagination
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

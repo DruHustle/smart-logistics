@@ -2,7 +2,7 @@ import { Linking, Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
-import { ownsNativeCallback, PendingOnesaTransactions, receiveBrowserCallback, type PendingOnesa } from "./callback";
+import { nativeRegistrationDestination, ownsNativeCallback, PendingOnesaTransactions, receiveBrowserCallback, type PendingOnesa } from "./callback";
 import { fetchIdentity } from "./identity-http";
 import { issuer, origin, redirect } from "./config";
 
@@ -110,6 +110,7 @@ export async function finish(url: string) {
   const { session } = await response.json();
   if (typeof session !== "string" || !session)
     throw Error("Your sign-in did not return a session.");
+  await SecureStore.deleteItemAsync(registrationKey).catch(() => {});
   return { session, destination: pending.destination };
 }
 
@@ -118,28 +119,24 @@ export const registrationReturn = "eu.onesa.logistics://signin/registered";
 
 export async function register(destination: string | null, audience: "user" | "admin") {
   if (Platform.OS !== "ios" && Platform.OS !== "android") throw Error("Unsupported registration platform.");
-  await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
+  await SecureStore.setItemAsync(registrationKey, JSON.stringify({
+    destination,
+    expires: Date.now() + 24 * 60 * 60_000,
+  }), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
   const url = "https://account.onesa.eu/register?audience=" + audience + "&product=logistics&platform=" + Platform.OS;
-  let returned: string | null = null;
-  try {
-    returned = await receiveBrowserCallback(
-      () => openAuthSessionAsync(url, registrationReturn),
-      observeCallback,
-      candidate => candidate === registrationReturn,
-      callbackGrace,
-    );
-    return returned;
-  } finally {
-    if (!returned) await SecureStore.deleteItemAsync(registrationKey);
-  }
+  const result = await openAuthSessionAsync(url, registrationReturn);
+  if (result.type === "success" && result.url === registrationReturn) return result.url;
+  // The app can receive the verification return after the sheet has closed.
+  if (result.type === "cancel" || result.type === "dismiss") return null;
+  await SecureStore.deleteItemAsync(registrationKey);
+  throw Error("unauthorized");
 }
 
 export async function registeredDestination(): Promise<string | null | undefined> {
   const stored = await SecureStore.getItemAsync(registrationKey);
   if (!stored) return undefined;
   await SecureStore.deleteItemAsync(registrationKey);
-  const {destination} = JSON.parse(stored);
-  return typeof destination === "string" ? destination : null;
+  return nativeRegistrationDestination(stored);
 }

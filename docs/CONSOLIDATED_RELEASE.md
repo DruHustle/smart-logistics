@@ -42,6 +42,10 @@ Protect `main` and production environments with the organization's required chec
 
 Frontend release artifacts contain only deployment URL and sanitized staged/public smoke receipts, not `.vercel`, environment files, production mail, cookies or credentials. A failed post-promotion smoke check requires the retained qualified rollback procedure; do not delete the earlier deployment or repositories. There is no automatic rollback to an unqualified historical image or deployment.
 
+Driver assignment migration `013_shipment_driver_assignments.sql` adds an append-only table. If the Node API runtime has per-table access, the migration operator must allow `SELECT` and `INSERT` on `public.shipment_driver_assignments` for the existing runtime role before starting the candidate. The runtime can continue to read workspace membership without write privileges. The release readiness probe verifies table access through the runtime connection.
+
+Migration `014_shipment_quotes.sql` adds the append-only `public.shipment_quotes` and `public.shipment_quote_selections` tables. Allow the same runtime `SELECT` and `INSERT` on both new tables. The runtime readiness probe checks all three tables.
+
 ## Retirement gate: every item must have verified evidence
 
 Before retiring **either** component repository, retain a dated release record identifying:

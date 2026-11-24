@@ -13,7 +13,9 @@ export const release = {
     "node-red-package-management-v1",
     "shipment-stock-v1",
     "operator-shipment-creation-v1",
+    "shipment-driver-assignment-v1",
+    "shipment-quotes-v1",
   ],
-  nodeSchema: "012_shared_registration_roles.sql",
+  nodeSchema: "014_shipment_quotes.sql",
   supplyChainSchema: "202611140001_ShipmentStock",
 };

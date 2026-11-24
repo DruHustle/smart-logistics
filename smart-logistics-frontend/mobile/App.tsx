@@ -89,6 +89,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const submitting = useRef(false);
+  const registrationBrowser = useRef<{ returned: boolean } | null>(null);
   const safeError = (e: unknown) => {
     if (!(e instanceof Error)) return setInfo("Please try again.");
     if (e.message === "onesa_denied")
@@ -109,30 +110,42 @@ export default function App() {
     if (submitting.current) return;
     submitting.current = true;
     setBusy(true);
+    const opening = { returned: false };
+    registrationBrowser.current = opening;
     try {
       const url = await register(destination, audience);
-      if (url) await receive(url);
+      registrationBrowser.current = null;
+      submitting.current = false;
+      if (url || opening.returned) await receive(registrationReturn);
     } catch (error) {
       fail(error);
     } finally {
+      if (registrationBrowser.current === opening) registrationBrowser.current = null;
       submitting.current = false;
       setBusy(false);
     }
   }
-  const resumingRegistration = useRef(false);
   async function receive(url: string) {
     try {
       if (url === registrationReturn) {
-        if (resumingRegistration.current) return;
-        resumingRegistration.current = true;
+        if (registrationBrowser.current) {
+          registrationBrowser.current.returned = true;
+          return;
+        }
+        if (submitting.current) return;
+        submitting.current = true;
         try {
           const requested = await registeredDestination();
           if (requested === undefined) return;
+          setBusy(true);
           const target = requested && validKey(requested) ? requested : null;
           setDestination(target);
           const callback = await start(target);
           if (callback) await receive(callback);
-        } finally { resumingRegistration.current = false; }
+        } finally {
+          submitting.current = false;
+          setBusy(false);
+        }
       } else if (url.startsWith(redirect + "?")) {
         const result = await finish(url);
         if (result) {

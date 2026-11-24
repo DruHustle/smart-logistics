@@ -32,6 +32,7 @@ export async function request(
   body?: unknown,
   cookie?: string,
   method = body === undefined ? "GET" : "POST",
+  headers?: Record<string, string>,
 ) {
   return fetch(base + path, {
     method,
@@ -39,6 +40,7 @@ export async function request(
       "X-Forwarded-For": `192.0.2.${++requestSequence}`,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(cookie ? { Cookie: cookie, Origin: "http://localhost:5173" } : {}),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -62,6 +64,131 @@ async function account(role = "user", workspaceId: string | null = null) {
   assert.equal(login.status, 200);
   return { row, cookie: login.headers.get("set-cookie")!.split(";")[0] };
 }
+
+test("dispatch driver assignments require an authorized workspace, persist changes and deduplicate retries", async () => {
+  const workspace = randomUUID(), otherWorkspace = randomUUID();
+  await connection.query(
+    "INSERT INTO workspaces(id,name) VALUES($1,'Dispatch fixture'),($2,'Other fixture')",
+    [workspace, otherWorkspace],
+  );
+  const engineer = await account("engineer", workspace);
+  const firstDriver = await account("user", workspace);
+  const secondDriver = await account("user", workspace);
+  const outsider = await account("user", otherWorkspace);
+  const { rows: [shipment, otherShipment] } = await connection.query(
+    `INSERT INTO shipments (workspace_id, provider, tracking_number, origin, destination)
+    VALUES ($1,'workspace-operator',$3,'Fixture origin','Fixture destination'),
+    ($2,'workspace-operator',$4,'Fixture origin','Fixture destination') RETURNING id`,
+    [workspace, otherWorkspace, randomUUID(), randomUUID()],
+  );
+  const endpoint = (id: number) => `/api/operations/shipments/${id}/driver-assignment`;
+  const read = (id = shipment.id, cookie = engineer.cookie) =>
+    request(endpoint(id), undefined, cookie);
+  const write = (
+    driverId: number | null, expectedVersion: number,
+    key = randomUUID(), id = shipment.id, cookie = engineer.cookie,
+  ) => request(endpoint(id), { driverId, expectedVersion }, cookie, "PUT", { "Idempotency-Key": key });
+
+  assert.equal((await request(endpoint(shipment.id))).status, 401);
+  assert.equal((await read(shipment.id, firstDriver.cookie)).status, 403);
+  assert.equal((await write(firstDriver.row.id, 0, randomUUID(), shipment.id, firstDriver.cookie)).status, 403);
+  assert.equal((await read(otherShipment.id)).status, 404);
+  assert.equal((await write(firstDriver.row.id, 0, randomUUID(), otherShipment.id)).status, 404);
+  const initial = await (await read()).json();
+  assert.equal(initial.assignment.driverId, null);
+  assert.equal(initial.assignment.version, 0);
+  assert.deepEqual(
+    initial.candidates.map((driver: { id: number }) => driver.id).sort((a: number, b: number) => a - b),
+    [engineer.row.id, firstDriver.row.id, secondDriver.row.id].sort((a, b) => a - b),
+  );
+  assert.equal((await write(outsider.row.id, 0)).status, 400);
+
+  const key = randomUUID();
+  assert.deepEqual(await (await write(firstDriver.row.id, 0, key)).json(), { version: 1, duplicate: false });
+  assert.deepEqual(await (await write(firstDriver.row.id, 0, key)).json(), { version: 1, duplicate: true });
+  assert.equal((await write(secondDriver.row.id, 0, key)).status, 409);
+  assert.equal((await (await read()).json()).assignment.driverId, firstDriver.row.id);
+
+  const twoEdits = await Promise.all([write(null, 1), write(secondDriver.row.id, 1)]);
+  assert.deepEqual(twoEdits.map(response => response.status).sort(), [200, 409]);
+  assert.equal((await (await read()).json()).assignment.version, 2);
+  assert.equal((await write(secondDriver.row.id, 2)).status, 200);
+  await connection.query("UPDATE users SET disabled=true WHERE id=$1", [secondDriver.row.id]);
+  const inactive = await (await read()).json();
+  assert.equal(inactive.assignment.driverId, null);
+  assert.equal(inactive.assignment.driverName, null);
+  assert.equal(inactive.assignment.driverUnavailable, true);
+  assert.equal((await write(secondDriver.row.id, 3)).status, 400);
+  assert.equal((await write(null, 3)).status, 200);
+  assert.equal((await (await read()).json()).assignment.driverUnavailable, false);
+  await connection.query("UPDATE shipments SET status='delivered' WHERE id=$1", [shipment.id]);
+  assert.equal((await (await read()).json()).editable, false);
+  assert.equal((await write(firstDriver.row.id, 4)).status, 409);
+  const audit = await connection.query(
+    "SELECT version,assigned_by FROM shipment_driver_assignments WHERE shipment_id=$1 ORDER BY version",
+    [shipment.id],
+  );
+  assert.deepEqual(audit.rows, [1, 2, 3, 4].map(version => ({ version, assigned_by: engineer.row.id })));
+});
+
+test("shipment quotes preserve source terms, restrict scope and serialize internal selection", async () => {
+  const own = randomUUID(), other = randomUUID();
+  await connection.query("INSERT INTO workspaces(id,name) VALUES($1,'Quote fixture'),($2,'Other fixture')", [own, other]);
+  const operator = await account("engineer", own);
+  const viewer = await account("user", own);
+  const external = await account("engineer", other);
+  const { rows: [shipment, neighbor] } = await connection.query(
+    `INSERT INTO shipments (workspace_id,provider,tracking_number,origin,destination)
+     VALUES ($1,'workspace-operator',$2,'Origin','Destination'),
+       ($1,'workspace-operator',$3,'Origin','Destination') RETURNING id`, [own, randomUUID(), randomUUID()],
+  );
+  const endpoint = `/api/operations/shipments/${shipment.id}/quotes`;
+  const read = (cookie = operator.cookie) => request(endpoint, undefined, cookie);
+  const write = (body: object, key = randomUUID(), path = endpoint, cookie = operator.cookie) =>
+    request(path, body, cookie, "POST", { "Idempotency-Key": key });
+  const draft = { action: "record", provider: "Fixture carrier", reference: "WRITTEN-1",
+    amount: "245.1234", currency: "EUR", validThrough: null };
+
+  assert.equal((await request(endpoint)).status, 401);
+  assert.equal((await read(viewer.cookie)).status, 403);
+  assert.equal((await read(external.cookie)).status, 404);
+  assert.equal((await write(draft, randomUUID(), endpoint, external.cookie)).status, 404);
+  assert.equal((await write({ ...draft, amount: "249.00001" })).status, 400);
+  const createKey = randomUUID();
+  const recorded = await write(draft, createKey);
+  assert.equal(recorded.status, 201);
+  const { quoteId } = await recorded.json();
+  assert.deepEqual(await (await write(draft, createKey)).json(), { quoteId, duplicate: true });
+  assert.equal((await write({ ...draft, amount: "250.1234" }, createKey)).status, 409);
+  assert.equal((await write(draft)).status, 409);
+  const initial = await (await read()).json();
+  assert.equal(initial.items[0].amount, "245.1234");
+  assert.equal(initial.items[0].currency, "EUR");
+  assert.equal(initial.version, 0);
+
+  const second = await (await write({ ...draft, reference: "WRITTEN-2" })).json();
+  const expired = await (await write({ ...draft, reference: "WRITTEN-3", validThrough: "2000-01-01" })).json();
+  const select = (id: string, expectedVersion: number, key = randomUUID(), path = endpoint) =>
+    write({ action: "select", quoteId: id, expectedVersion }, key, path);
+  assert.equal((await select(quoteId, 0, randomUUID(), `/api/operations/shipments/${neighbor.id}/quotes`)).status, 404);
+  assert.equal((await select(expired.quoteId, 0)).status, 409);
+  const firstKey = randomUUID();
+  assert.equal((await select(quoteId, 0, firstKey)).status, 200);
+  assert.deepEqual(await (await select(quoteId, 0, firstKey)).json(), { quoteId, version: 1, duplicate: true });
+  const competing = await Promise.all([select(second.quoteId, 1), select(quoteId, 1)]);
+  assert.deepEqual(competing.map(result => result.status).sort(), [200, 409]);
+  const current = await (await read()).json();
+  assert.equal(current.version, 2);
+  assert.ok(current.selectedQuoteId);
+  assert.deepEqual((await connection.query(
+    "SELECT version,selected_by FROM shipment_quote_selections WHERE shipment_id=$1 ORDER BY version", [shipment.id],
+  )).rows, [1, 2].map(version => ({ version, selected_by: operator.row.id })));
+  assert.equal((await connection.query("SELECT status FROM shipments WHERE id=$1", [shipment.id])).rows[0].status, "pending");
+  await connection.query("UPDATE shipments SET status='delivered' WHERE id=$1", [shipment.id]);
+  assert.equal((await (await read()).json()).editable, false);
+  assert.equal((await select(quoteId, 2)).status, 409);
+});
+
 test("mail builder emits a single hash token and preserves configured query parameters", () => {
   const link = buildResetLink(
     "https://app.imsop.test/?campaign=help#/reset-password?lang=en&token=old",

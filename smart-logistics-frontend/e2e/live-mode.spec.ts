@@ -8,6 +8,89 @@ import {
   liveOrder,
 } from "./helpers";
 
+test("a live dispatcher assigns a driver and sees the saved assignment after reload", async ({
+  page,
+}) => {
+  await liveSession(page, "engineer");
+  const driver = { id: 12, name: "Fixture driver" };
+  let assigned = false;
+  const routeName = "/api/operations/shipments/77/driver-assignment";
+  await page.route(`**${routeName}?offset=0`, route => route.fulfill({
+    json: {
+      assignment: {
+        driverId: assigned ? driver.id : null,
+        driverName: assigned ? driver.name : null,
+        driverUnavailable: false,
+        recordedAt: assigned ? "2026-11-23T12:30:00Z" : null,
+        version: assigned ? 1 : 0,
+      },
+      candidates: [driver],
+      editable: true,
+      previousOffset: null,
+      nextOffset: null,
+    },
+  }));
+  await page.route(`**${routeName}`, route => {
+    expect(route.request().method()).toBe("PUT");
+    expect(route.request().headers()["idempotency-key"]).toMatch(/^[a-f0-9-]{36}$/);
+    expect(route.request().postDataJSON()).toEqual({ driverId: driver.id, expectedVersion: 0 });
+    assigned = true;
+    return route.fulfill({ json: { version: 1, duplicate: false } });
+  });
+
+  await page.goto("/#/supply-chain/shipments/77");
+  await page.getByText("Driver assignment", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Dispatch driver" })).toBeVisible();
+  await expect(page.getByText("No driver assigned", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Driver", exact: true }).selectOption("12");
+  await page.getByRole("button", { name: "Save driver" }).click();
+  await expect(page.getByText("Driver assignment saved.", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByText("Driver assignment", { exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Driver", exact: true })).toHaveValue("12");
+});
+
+test("a live dispatcher records provider terms and selects a preferred quote", async ({ page }) => {
+  await liveSession(page, "engineer");
+  const endpoint = "/api/operations/shipments/77/quotes";
+  const terms = { provider: "Fixture carrier", reference: "WRITTEN-2026", amount: "245.1234", currency: "EUR", validThrough: null };
+  const sample = { id: "f65e14b1-98ac-4a2c-b844-6eca10b22b5a", ...terms, expired: false };
+  let recorded = false;
+  let selected = false;
+  await page.route(`**${endpoint}?offset=0`, route => route.fulfill({ json: {
+    items: recorded ? [sample] : [], editable: true, version: selected ? 1 : 0,
+    selectedQuoteId: selected ? sample.id : null, previousOffset: null, nextOffset: null,
+  } }));
+  await page.route(`**${endpoint}`, route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().headers()["idempotency-key"]).toMatch(/^[a-f0-9-]{36}$/);
+    const body = route.request().postDataJSON();
+    if (!recorded) {
+      expect(body).toEqual({ action: "record", ...terms });
+      recorded = true;
+      return route.fulfill({ status: 201, json: { quoteId: sample.id, duplicate: false } });
+    }
+    expect(body).toEqual({ action: "select", quoteId: sample.id, expectedVersion: 0 });
+    selected = true;
+    return route.fulfill({ json: { quoteId: sample.id, version: 1, duplicate: false } });
+  });
+
+  await page.goto("/#/supply-chain/shipments/77");
+  await page.locator("summary").filter({ hasText: "Shipping quotes" }).click();
+  await expect(page.getByText("No quotes recorded.")).toBeVisible();
+  await page.getByLabel("Quote provider").fill(terms.provider);
+  await page.getByLabel("Quote reference").fill(terms.reference);
+  await page.getByLabel("Quoted amount").fill(terms.amount);
+  await page.getByLabel("Currency code").fill("eur");
+  await page.getByRole("button", { name: "Record quote" }).click();
+  await expect(page.getByText("245.1234 EUR", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Select quote WRITTEN-2026" }).click();
+  await expect(page.getByText("Preferred quote", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.locator("summary").filter({ hasText: "Shipping quotes" }).click();
+  await expect(page.getByText("Preferred quote", { exact: true })).toBeVisible();
+});
+
 test("the live form and an active demonstration both expose isolated demo accounts", async ({
   page,
 }) => {
