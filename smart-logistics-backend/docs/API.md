@@ -21,6 +21,8 @@ All operational calls require a valid cookie/bearer session and provisioned work
 | GET `/api/operations/shipments/:id/events` | Scoped event metadata, at most 100; no raw webhook payload |
 | GET `/api/operations/shipments/:id/driver-assignment` | Administrators and engineers can read the current assignment and page through active workspace members using `offset`. |
 | PUT `/api/operations/shipments/:id/driver-assignment` | Administrators and engineers send `Idempotency-Key` and `{driverId,expectedVersion}`. A `null` driver ID clears the assignment. |
+| GET `/api/operations/shipments/:id/quotes` | Administrators and engineers read recorded provider quotes and the latest internal selection. Page using `offset`. |
+| POST `/api/operations/shipments/:id/quotes` | Administrators and engineers send `Idempotency-Key` and `{action:"record",provider,reference,amount,currency,validThrough}` or `{action:"select",quoteId,expectedVersion}`. |
 | GET `/api/operations/orders[/:id]` | Node numeric orders; admin/engineer/analyst; currency nullable |
 | GET `/api/operations/reports/access` | admin/analyst export permission |
 | GET `/api/operations/{shipments,orders}/export/report` | HTML, same filters, cap 10,000, escaped values and report metadata |
@@ -63,6 +65,8 @@ The implemented [forecast adapter contract](contracts/OPTIONAL_FORECAST_PROVIDER
 Tracking-event reads expose only the stored event metadata plus `position: {lat,lng} | null` and normalized `status | null` from that specific event. Raw provider payloads remain private. Missing locations are never carried forward into historical replay; workspace/provider/tracking boundaries and the bounded event page remain enforced.
 
 Driver assignment is an internal dispatch record. New shipments and existing shipments with no assignment start at version zero. Every accepted change records the actor, version and timestamp, and retrying the same request does not append a second event. Concurrent edits require the caller to reload before retrying. Assignments cannot be changed after a shipment is delivered or cancelled. A disabled or departed member's name is withheld. Assignment grants no access and does not change provider tracking or delivery status.
+
+Record a provider’s written quote with its reference and quoted currency. Submit the exact positive amount as a decimal string with up to four fractional digits. `validThrough` is a calendar date in UTC or `null`. Selection records the preferred quote and the responsible operator for internal review. An expired quote can be retained in the shipment’s records. Open current quotes are eligible for selection on active shipments. Each selection retains its actor, version and timestamp. Carrier bookings and payment remain separate workflows.
 
 ## Shared Onesa account sessions
 

@@ -91,6 +91,20 @@ test("real purchasing, warehouse receiving, email opt-in and validated provider 
   await expect(
     page.getByRole("heading", { name: shipmentRef, exact: true })
   ).toBeVisible();
+  const quotes = page.locator("summary").filter({ hasText: "Shipping quotes" });
+  await quotes.click();
+  await page.getByLabel("Quote provider", { exact: true }).fill("Isolated carrier offer");
+  await page.getByLabel("Quote reference", { exact: true }).fill("OFFER-" + shipmentRef);
+  await page.getByLabel("Quoted amount", { exact: true }).fill("195.1234");
+  await page.getByLabel("Currency code", { exact: true }).fill("EUR");
+  await page.getByRole("button", { name: "Record quote", exact: true }).click();
+  await expect(page.getByText("195.1234 EUR", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Select quote OFFER-" + shipmentRef, exact: true }).click();
+  await expect(page.getByText("Preferred quote", { exact: true })).toBeVisible();
+  await page.reload();
+  await quotes.click();
+  await expect(page.getByText("Preferred quote", { exact: true })).toBeVisible();
+  await quotes.click();
   await page
     .getByRole("button", { name: "Shipment stock and handover", exact: true })
     .click();

@@ -51,6 +51,17 @@ export function ownsNativeCallback(incoming: string, pending: PendingOnesa): boo
   }
 }
 
+export function nativeRegistrationDestination(stored: string, now = Date.now()): string | null | undefined {
+  try {
+    const attempt = JSON.parse(stored) as { destination?: unknown; expires?: unknown } | null;
+    if (!attempt || (attempt.destination !== null && typeof attempt.destination !== "string")) return undefined;
+    // Existing one-use receipts contain only the destination.
+    if (attempt.expires !== undefined && (typeof attempt.expires !== "number" ||
+      !Number.isSafeInteger(attempt.expires) || attempt.expires <= now)) return undefined;
+    return attempt.destination;
+  } catch { return undefined; }
+}
+
 export async function receiveBrowserCallback(
   open: () => Promise<{ type: string; url?: string }>,
   subscribe: (receive: (url: string) => void) => () => void,

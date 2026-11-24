@@ -14,7 +14,8 @@ export const release = {
     "shipment-stock-v1",
     "operator-shipment-creation-v1",
     "shipment-driver-assignment-v1",
+    "shipment-quotes-v1",
   ],
-  nodeSchema: "013_shipment_driver_assignments.sql",
+  nodeSchema: "014_shipment_quotes.sql",
   supplyChainSchema: "202611140001_ShipmentStock",
 };

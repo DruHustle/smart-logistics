@@ -30,9 +30,8 @@ export function rememberRegistration() {
 
 export function resumeRegistration() {
   if (window.location.hash !== "#/login?registration=complete") return false;
-  const route = safeSessionStorage.getItem(registrationKey);
+  const route = workspaceDestination(safeSessionStorage.getItem(registrationKey)) ?? "#/";
   safeSessionStorage.removeItem(registrationKey);
-  if (!route) return false;
   safeSessionStorage.setItem("imsop:return-to", route);
   history.replaceState(null, "", "#/login?returnTo=" + encodeURIComponent(route));
   return true;

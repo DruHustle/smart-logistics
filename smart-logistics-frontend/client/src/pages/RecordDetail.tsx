@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ShipmentStock } from "@/components/ShipmentStock";
 import { ShipmentDriver } from "@/components/ShipmentDriver";
+import { ShipmentQuotes } from "@/components/ShipmentQuotes";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
 import { ReadError, readSource, useData } from "@/contexts/DataContext";
@@ -52,6 +53,7 @@ function Detail({ kind, id, tracking = false }: Props) {
   const [retry, setRetry] = useState(0);
   const [eventPage, setEventPage] = useState(0);
   const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [quotesOpen, setQuotesOpen] = useState(false);
   const query = useHashQuery();
   const returnTo = query.get("return");
   const back =
@@ -174,11 +176,18 @@ function Detail({ kind, id, tracking = false }: Props) {
           <>
             {kind === "shipments" && !tracking && mode === "live" &&
               (user?.role === "admin" || user?.role === "engineer") && (
-                <details className="source-details"
-                  onToggle={event => setDispatchOpen(event.currentTarget.open)}>
-                  <summary>Driver assignment</summary>
-                  {dispatchOpen && <ShipmentDriver shipment={id} />}
-                </details>
+                <>
+                  <details className="source-details"
+                    onToggle={event => setQuotesOpen(event.currentTarget.open)}>
+                    <summary>Shipping quotes</summary>
+                    {quotesOpen && <ShipmentQuotes shipment={id} />}
+                  </details>
+                  <details className="source-details"
+                    onToggle={event => setDispatchOpen(event.currentTarget.open)}>
+                    <summary>Driver assignment</summary>
+                    {dispatchOpen && <ShipmentDriver shipment={id} />}
+                  </details>
+                </>
               )}
             {kind === "shipments" && mode === "live" && (
               <ShipmentStock shipment={id} />
