@@ -46,6 +46,32 @@ Driver assignment migration `013_shipment_driver_assignments.sql` adds an append
 
 Migration `014_shipment_quotes.sql` adds the append-only `public.shipment_quotes` and `public.shipment_quote_selections` tables. Allow the same runtime `SELECT` and `INSERT` on both new tables. The runtime readiness probe checks all three tables.
 
+## Isolated staging before release
+
+The default Vercel preview uses the committed production API rewrites. Use it only for non-operational frontend inspection. Before a sign-in or data-changing test, verify the isolated staging endpoints and the same consolidated source revision on both components.
+
+1. From the successful main image-publication run, select the `imsop-backend` receipt with the expected repository and full revision and `deployed: false`. On the approved ARM64 test host, pull only the published digest and ensure loopback port 18069 is free. For the disposable boot check, run:
+
+   ```sh
+   bash smart-logistics-backend/server/system/production-boot-check.sh \
+     --stage-image "ghcr.io/druhustle/imsop-backend@${VERIFIED_IMAGE_DIGEST}" "$REVIEWED_REVISION"
+   ```
+
+   The check matches the image's ARM64 label, source and revision, starts the existing disposable database fixture, and verifies exact serving revision, readiness, anonymous denial and allowed/denied origins. It runs on loopback using synthetic data, without the production database overlay. This check does not commission a serving API or a live issuer.
+
+2. Provision the approved staging runtime separately from `imsop-app-backend`. Use a distinct project, verified free loopback port, private database and runtime/migration roles, and isolated storage, secrets and provider sinks. Apply the Node steps through 014 and the reviewed .NET migrations through their respective stage migration principals. Verify required table ACLs, compatible rollback and a scoped restore. The production Oracle installer and its database overlay select the production network and CA. Keep them out of the staging stack.
+
+3. After verifying the staging HTTPS binding and protected frontend origin, generate the Preview configuration and HTML from a clean copy of the exact release frontend source. The command writes a JSON artifact to standard output:
+
+   ```sh
+   LOGISTICS_STAGE_API_ORIGIN=https://logistics-api-staging.onesa.eu \
+   LOGISTICS_STAGE_WEB_ORIGIN=https://logistics-staging.onesa.eu \
+   node smart-logistics-frontend/scripts/prepare-deployment.mjs --staging \
+     smart-logistics-frontend/vercel.json smart-logistics-frontend/client/index.html
+   ```
+
+   Install the generated `config` and `html` only in the protected Preview build workspace. Leave production aliases unassigned and retain the source revision and artifact digest. Use only stage credentials and require that every protected proxy and backend request resolve through the staging API. Leave live sign-in gated until the isolated issuer/client/callback, verified roles and MFA, logout and revocation all pass on the approved stage.
+
 ## Retirement gate: every item must have verified evidence
 
 Before retiring **either** component repository, retain a dated release record identifying:
