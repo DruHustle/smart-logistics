@@ -50,14 +50,14 @@ Migration `014_shipment_quotes.sql` adds the append-only `public.shipment_quotes
 
 The default Vercel preview uses the committed production API rewrites. Use it only for non-operational frontend inspection. Before a sign-in or data-changing test, verify the isolated staging endpoints and the same consolidated source revision on both components.
 
-1. From the successful main image-publication run, select the `imsop-backend` receipt with the expected repository and full revision and `deployed: false`. On the approved ARM64 test host, pull only the published digest and ensure loopback port 18069 is free. For the disposable boot check, run:
+1. From the successful main image-publication run, select the `imsop-backend` receipt with the expected repository and full revision and `deployed: false`. On the approved ARM64 test host, pre-load only the published digest and the reviewed official `postgres:16-alpine` fixture image. For the disposable boot check, run:
 
    ```sh
    bash smart-logistics-backend/server/system/production-boot-check.sh \
      --stage-image "ghcr.io/druhustle/imsop-backend@${VERIFIED_IMAGE_DIGEST}" "$REVIEWED_REVISION"
    ```
 
-   The check matches the image's ARM64 label, source and revision, starts the existing disposable database fixture, and verifies exact serving revision, readiness, anonymous denial and allowed/denied origins. It runs on loopback using synthetic data, without the production database overlay. This check does not commission a serving API or a live issuer.
+   The check matches the image's ARM64 label, source and revision, then requires a fresh Compose project, unused network and database volume, and free loopback port 18069. The disposable backend and PostgreSQL run on one internal network without external connectivity. Their combined caps are 0.75 CPU and 1.25 GiB, with no additional swap, and Compose uses only pre-loaded images. The stage probe uses host Python 3 to verify exact serving revision, readiness, anonymous denial and allowed/denied origins. It does not commission a serving API or a live issuer.
 
 2. Provision the approved staging runtime separately from `imsop-app-backend`. Use a distinct project, verified free loopback port, private database and runtime/migration roles, and isolated storage, secrets and provider sinks. Apply the Node steps through 014 and the reviewed .NET migrations through their respective stage migration principals. Verify required table ACLs, compatible rollback and a scoped restore. The production Oracle installer and its database overlay select the production network and CA. Keep them out of the staging stack.
 
