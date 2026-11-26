@@ -47,18 +47,12 @@ export default function Register() {
     <main className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <h1 className="text-2xl font-bold">Create your Onesa account</h1>
-          <CardDescription>
-            One Onesa account works across products. Your Logistics workspace and
-            administrator access are approved separately.
-          </CardDescription>
+          <h1 className="text-2xl font-bold">Sign up</h1>
+
         </CardHeader>
         <CardContent className="space-y-3">
           <Button asChild className="w-full">
-            <a href={identityRegistration("user")} onClick={rememberRegistration}>Register as a user</a>
-          </Button>
-          <Button asChild variant="outline" className="w-full">
-            <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>
+            <a href={identityRegistration("user")} onClick={rememberRegistration}>Sign up</a>
           </Button>
           <Button asChild variant="ghost" className="w-full"><Link href="/login">Back to sign in</Link></Button>
         </CardContent>

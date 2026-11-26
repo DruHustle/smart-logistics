@@ -100,7 +100,7 @@ export default function Login() {
       );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Onesa sign-in is unavailable."
+        error instanceof Error ? error.message : "Sign-in is unavailable."
       );
       setIsLoading(false);
     }
@@ -164,7 +164,7 @@ export default function Login() {
               ? "Demo sign-in · Example data only"
               : liveRequested
                 ? hostedWorkspace
-                  ? "Sign in with your Onesa account to view live data."
+                  ? "Sign in to view live data."
                   : "Sign in with your workspace account to view live data."
                 : "Live access uses your Onesa Company Portal account."}
           </p>
@@ -186,11 +186,11 @@ export default function Login() {
               {onesaResult === "link"
                 ? "This email already has a Logistics account. Enter its email and password below, then choose Link account with Onesa to confirm both accounts."
                 : onesaResult === "cancelled"
-                  ? "Onesa sign-in was cancelled. You can try again."
+                  ? "Sign-in was cancelled. You can try again."
                   : onesaResult === "denied"
                   ? "Your Onesa account needs approved Logistics access. Administrators must complete MFA."
                   : onesaResult === "unavailable"
-                    ? "Onesa sign-in is temporarily unavailable. Please try again."
+                    ? "Sign-in is temporarily unavailable. Please try again."
                     : "This sign-in has expired. Please start again."}
             </p>
           )}
@@ -201,7 +201,7 @@ export default function Login() {
               disabled={isLoading}
               onClick={() => void signInWithOnesa()}
             >
-              Sign in with Onesa
+              Sign in
             </Button>
           )}
           {hostedWorkspace &&
@@ -216,7 +216,7 @@ export default function Login() {
                     void apiAuthService.onesaAvailable()
                       .then(setOnesaEnabled).catch(() => setOnesaEnabled(false));
                   }}>
-                  Retry Onesa sign-in
+                  Retry Sign-in
                 </Button>
               </div>
             )}
@@ -333,13 +333,6 @@ export default function Login() {
             >
               Sign Up
             </button>
-            {hostedWorkspace && (
-              <p className="mt-2">
-                <a href={identityRegistration("admin")} onClick={rememberRegistration} className="text-primary hover:underline">
-                  Request administrator access
-                </a>
-              </p>
-            )}
           </div>
 
           {!hostedWorkspace && <details
