@@ -44,14 +44,14 @@ export default function ForgotPassword() {
     <main className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <h1 className="text-2xl font-bold">Recover your Onesa account</h1>
+          <h1 className="text-2xl font-bold">Reset your password</h1>
           <CardDescription>
-            Logistics uses your shared Onesa account. At the Onesa sign-in screen,
+            At the sign-in screen,
             choose Forgot password to reset your password securely.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button asChild className="w-full"><a href={identityRecovery}>Open Onesa sign-in</a></Button>
+          <Button asChild className="w-full"><a href={identityRecovery}>Open sign-in</a></Button>
           <Button variant="outline" className="w-full" onClick={() => navigate("/login")}>Back to sign in</Button>
         </CardContent>
       </Card>
