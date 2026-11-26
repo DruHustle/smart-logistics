@@ -164,9 +164,9 @@ export default function Login() {
               ? "Demo sign-in · Example data only"
               : liveRequested
                 ? hostedWorkspace
-                  ? "Sign in with your Onesa account to view live data."
+                  ? "Sign in to view live data."
                   : "Sign in with your workspace account to view live data."
-                : "Live access uses your Onesa Company Portal account."}
+                : "Live access requires an approved workspace."}
           </p>
           {signInMode === "demo" && (
             <Button
@@ -201,7 +201,7 @@ export default function Login() {
               disabled={isLoading}
               onClick={() => void signInWithOnesa()}
             >
-              Sign in with Onesa
+              Sign in
             </Button>
           )}
           {hostedWorkspace &&
@@ -216,7 +216,7 @@ export default function Login() {
                     void apiAuthService.onesaAvailable()
                       .then(setOnesaEnabled).catch(() => setOnesaEnabled(false));
                   }}>
-                  Retry Onesa sign-in
+                  Retry sign-in
                 </Button>
               </div>
             )}

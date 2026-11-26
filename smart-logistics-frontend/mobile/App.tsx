@@ -279,11 +279,11 @@ export default function App() {
                 .
               </Text>
               <Button
-                title="Sign in with Onesa"
+                title="Sign in"
                 onPress={login}
                 disabled={busy}
               />
-              <Button title="Create an Onesa account" disabled={busy} onPress={() => void enroll("user")} />
+              <Button title="Create account" disabled={busy} onPress={() => void enroll("user")} />
               <Button title="Request administrator access" disabled={busy} onPress={() => void enroll("admin")} />
               <PublicPreview />
             </View>
