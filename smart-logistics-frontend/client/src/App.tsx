@@ -50,7 +50,7 @@ function LegacyRedirect({ href }: { href: string }) {
 function ManagedRecoveryRedirect() {
   // Never send legacy password reset tokens to the central identity provider.
   useEffect(() => { window.location.replace(identityRecovery); }, []);
-  return <a href={identityRecovery}>Open Onesa sign-in to recover your account</a>;
+  return <a href={identityRecovery}>Open sign-in to recover your account</a>;
 }
 
 function WorkspaceRouter() {
