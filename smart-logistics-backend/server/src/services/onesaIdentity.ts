@@ -12,7 +12,7 @@ import { nativeClient } from "./nativeAuthorization";
 import {accessIdentity, InactiveIdentity, signingKeys, tokenProfile} from "./managedOnesa";
 export {InactiveIdentity} from "./managedOnesa";
 
-type Config = {issuer:string;client:string;secret:string;origin:string;redirect:string;managed?:ReturnType<typeof signingKeys>};
+type Config = {issuer:string;client:string;secret:string;origin:string;redirect:string;managed?:ReturnType<typeof signingKeys>;signup?:boolean};
 const callbackPath = "/api/auth/onesa/callback";
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
@@ -40,7 +40,8 @@ export function identityConfig():Config|null {
     secret.length > 256
   )
     throw Error("Invalid Onesa configuration");
-  return { issuer, client, secret, redirect, origin, managed };
+  return { issuer, client, secret, redirect, origin, managed,
+    signup: Boolean(managed && process.env.ONESA_IDENTITY_DIRECT_SIGNUP === "true") };
 }
 // The PKCE secret is unique per login; a separate derivation binds the ID token to that transaction.
 const transactionNonce = (verifier:string) => digest("logistics-oidc-nonce:" + verifier);
@@ -49,6 +50,7 @@ export function authorizationUrl(
   config: Config,
   state: string,
   verifier: string,
+  signup = false,
 ) {
   const params = new URLSearchParams({
     response_type: "code",
@@ -60,6 +62,7 @@ export function authorizationUrl(
     nonce: transactionNonce(verifier),
     code_challenge: digest(verifier),
     code_challenge_method: "S256",
+    ...(signup ? {screen_hint:"signup"} : {}),
   });
   return config.issuer + (config.managed ? "authorize?" : "/auth?") + params;
 }

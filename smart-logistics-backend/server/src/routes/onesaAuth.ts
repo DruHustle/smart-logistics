@@ -98,19 +98,21 @@ const localProof = z
     password: z.string().min(1).max(128),
   })
   .strict();
-router.get("/config", (_req, res) =>
-  res.json({ enabled: Boolean(identityConfig()) }),
-);
+router.get("/config", (_req, res) => {
+  const config = identityConfig();
+  return res.json({ enabled: Boolean(config), ...(config?.signup ? {signup:true} : {}) });
+});
 router.post("/start", rateLimit(15 * 60_000, 15), async (req, res) => {
   const config = identityConfig();
   if (!config)
     return res.status(503).json({ error: "Onesa sign-in is unavailable." });
   if (req.headers.origin !== config.origin) return res.sendStatus(403);
   const input = z
-    .object({ link: localProof.optional(), returnTo: z.string().max(2048).optional() })
+    .object({ link: localProof.optional(), returnTo: z.string().max(2048).optional(), signup:z.boolean().optional() })
     .strict()
     .safeParse(req.body);
   if (!input.success) return res.sendStatus(400);
+  if (input.data.signup && (!config.signup || input.data.link)) return res.sendStatus(403);
   let localId: number | null = null,
     version: number | null = null;
   if (input.data.link) {
@@ -145,7 +147,7 @@ router.post("/start", rateLimit(15 * 60_000, 15), async (req, res) => {
   res.cookie(returnCookie, safeReturnPath(input.data.returnTo), {
     ...cookieOptions, maxAge: 5 * 60_000,
   });
-  return res.json({ url: authorizationUrl(config, state, verifier) });
+  return res.json({ url: authorizationUrl(config, state, verifier, input.data.signup) });
 });
 
 router.get("/callback", async (req, res) => {

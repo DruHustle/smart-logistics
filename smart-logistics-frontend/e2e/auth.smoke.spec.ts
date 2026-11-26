@@ -102,10 +102,10 @@ test("hosted login fails closed without Portal fallback during an issuer outage"
   await page.goto(hosted + "/#/login");
   // A failed issuer never authorizes the unrelated Portal admin entry.
   // Recovery is retrying the real issuer, not redirecting to weaker credentials.
-  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry sign-in" })).toBeVisible();
   await expect(page.getByRole("status").getByRole("link", { name: "Company Portal" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Retry Onesa sign-in" }).click();
-  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await page.getByRole("button", { name: "Retry sign-in" }).click();
+  await expect(page.getByRole("button", { name: "Retry sign-in" })).toBeVisible();
   await expect(page).toHaveURL(hosted + "/#/login");
 
   await page.goto(hosted + "/#/login");
@@ -213,7 +213,7 @@ test("hosted Logistics discards a previous browser demo session on an administra
   });
 
   await page.goto(hosted + "/#/infrastructure/health");
-  await expect(page.getByRole("button", { name: "Sign in with Onesa", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Service health", exact: true })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("imsop_token"))).toBeNull();
   await expect.poll(() => [...apiRequests].sort()).toEqual([

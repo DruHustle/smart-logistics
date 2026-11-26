@@ -64,7 +64,7 @@ jobs:
             sleep 5
             adb shell pidof eu.onesa.logistics
             adb shell uiautomator dump /sdcard/operator-window.xml
-            adb shell cat /sdcard/operator-window.xml | grep -i 'Sign in with Onesa'
+            adb shell cat /sdcard/operator-window.xml | grep -Ei '(text|content-desc)="Sign in"'
             adb shell cat /sdcard/operator-window.xml | grep -i 'Explore Smart Logistics'
   ios:
     runs-on: macos-26

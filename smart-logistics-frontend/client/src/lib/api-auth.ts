@@ -71,12 +71,14 @@ export class ApiAuthService implements IAuthService {
       clearTimeout(timeout);
     }
   }
-  async onesaAvailable(): Promise<boolean> {
-    return (await this.fetchApi("/api/auth/onesa/config")).enabled === true;
+  async onesaEntry(): Promise<{enabled:boolean;signup:boolean}> {
+    const config = await this.fetchApi("/api/auth/onesa/config");
+    return {enabled:config.enabled === true,signup:config.signup === true};
   }
   async startOnesa(
     link?: { email: string; password: string },
-    destination?: string
+    destination?: string,
+    signup = false,
   ): Promise<void> {
     if (safeSessionStorage.getItem("imsop:signout-pending"))
       await this.logout(false);
@@ -88,6 +90,7 @@ export class ApiAuthService implements IAuthService {
       method: "POST",
       body: JSON.stringify({
         ...(link ? { link } : {}),
+        ...(signup ? { signup:true } : {}),
         returnTo,
       }),
     });

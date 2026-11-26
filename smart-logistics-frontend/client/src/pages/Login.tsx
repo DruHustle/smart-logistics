@@ -32,16 +32,17 @@ export default function Login() {
   const query = useHashQuery();
   const liveRequested = query.get("mode") === "live";
   const onesaResult = query.get("onesa");
-  const [onesaEnabled, setOnesaEnabled] = useState<boolean | null>(null);
+  const [onesaEntry, setOnesaEntry] = useState<{enabled:boolean;signup:boolean} | null>(null);
+  const onesaEnabled = onesaEntry?.enabled ?? null;
   useEffect(() => {
     let active = true;
     apiAuthService
-      .onesaAvailable()
-      .then(enabled => {
-        if (active) setOnesaEnabled(enabled);
+      .onesaEntry()
+      .then(entry => {
+        if (active) setOnesaEntry(entry);
       })
       .catch(() => {
-        if (active) setOnesaEnabled(false);
+        if (active) setOnesaEntry({enabled:false,signup:false});
       });
     return () => {
       active = false;
@@ -91,12 +92,13 @@ export default function Login() {
     if (onesaEnabled && resumeRegistration()) void signInWithOnesa();
   }, [onesaEnabled]);
 
-  async function signInWithOnesa(link = false, destination?: string) {
+  async function signInWithOnesa(link = false, destination?: string, signup = false) {
     setIsLoading(true);
     try {
       await apiAuthService.startOnesa(
         link ? { email: email.trim(), password } : undefined,
-        destination
+        destination,
+        signup,
       );
     } catch (error) {
       toast.error(
@@ -164,9 +166,9 @@ export default function Login() {
               ? "Demo sign-in · Example data only"
               : liveRequested
                 ? hostedWorkspace
-                  ? "Sign in with your Onesa account to view live data."
+                  ? "Sign in to view live data."
                   : "Sign in with your workspace account to view live data."
-                : "Live access uses your Onesa Company Portal account."}
+                : "Live access requires an approved workspace."}
           </p>
           {signInMode === "demo" && (
             <Button
@@ -201,7 +203,7 @@ export default function Login() {
               disabled={isLoading}
               onClick={() => void signInWithOnesa()}
             >
-              Sign in with Onesa
+              Sign in
             </Button>
           )}
           {hostedWorkspace &&
@@ -212,11 +214,11 @@ export default function Login() {
                 account or administrator sign-in is used.</p>
                 <Button type="button" variant="outline" disabled={isLoading}
                   onClick={() => {
-                    setOnesaEnabled(null);
-                    void apiAuthService.onesaAvailable()
-                      .then(setOnesaEnabled).catch(() => setOnesaEnabled(false));
+                    setOnesaEntry(null);
+                    void apiAuthService.onesaEntry()
+                      .then(setOnesaEntry).catch(() => setOnesaEntry({enabled:false,signup:false}));
                   }}>
-                  Retry Onesa sign-in
+                  Retry sign-in
                 </Button>
               </div>
             )}
@@ -326,6 +328,7 @@ export default function Login() {
             <button
               onClick={() => {
                 if (!hostedWorkspace) return navigate("/register");
+                if (onesaEntry?.enabled && onesaEntry.signup) return void signInWithOnesa(false, undefined, true);
                 rememberRegistration();
                 window.location.assign(identityRegistration("user"));
               }}
