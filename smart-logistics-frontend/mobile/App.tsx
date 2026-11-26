@@ -93,9 +93,9 @@ export default function App() {
   const safeError = (e: unknown) => {
     if (!(e instanceof Error)) return setInfo("Please try again.");
     if (e.message === "onesa_denied")
-      return setInfo("Onesa sign-in was cancelled. You can try again.");
+      return setInfo("Sign-in was cancelled. You can try again.");
     if (e.message === "unauthorized")
-      return setInfo("This Onesa sign-in attempt expired. Please try again.");
+      return setInfo("This sign-in attempt expired. Please try again.");
     setInfo(e.message);
   };
   function fail(e: unknown) {
@@ -279,12 +279,11 @@ export default function App() {
                 .
               </Text>
               <Button
-                title="Sign in with Onesa"
+                title="Sign in"
                 onPress={login}
                 disabled={busy}
               />
-              <Button title="Create an Onesa account" disabled={busy} onPress={() => void enroll("user")} />
-              <Button title="Request administrator access" disabled={busy} onPress={() => void enroll("admin")} />
+              <Button title="Sign up" disabled={busy} onPress={() => void enroll("user")} />
               <PublicPreview />
             </View>
           ) : (
