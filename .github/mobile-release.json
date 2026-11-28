@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "repository": "DruHustle/smart-logistics",
+  "mobilePath": "smart-logistics-frontend/mobile",
+  "framework": "expo",
+  "appId": "eu.onesa.logistics",
+  "scheme": "SmartLogistics",
+  "xcodeKind": "workspace",
+  "xcodeContainer": "ios/SmartLogistics.xcworkspace",
+  "generatedNative": true,
+  "requiredChecks": [
+    "frontend",
+    "backend-node",
+    "backend-dotnet",
+    "release-boundaries",
+    "qualify-system / postgres-gateway",
+    "qualify-system / real-browser-workflows",
+    "android",
+    "ios"
+  ]
+}
